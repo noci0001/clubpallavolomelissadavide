@@ -361,7 +361,10 @@ function persist(){
    ===================== */
 
 async function handleToggleNotifications(){
-async function handleToggleNotifications(){
+  alert(
+    "secureContext=" + window.isSecureContext +
+    "\nNotification.permission=" + (window.Notification ? Notification.permission : "NO Notification API")
+  );
   // Se il browser non supporta notifiche
   if(!("Notification" in window)){
     alert("Questo browser non supporta le notifiche.");
