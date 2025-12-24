@@ -331,8 +331,9 @@ let state = {
   authMode: 'login',
   authError: null,
   authForm: {
-    email:'', password:'', confirmPassword:'',
-    nome:'', gender:'', dateOfBirth:'', avatarUrl:''
+    nome: '',
+    code: '',
+    birthYear: ''
   },
 
   notificationsEnabled: (localStorage.getItem(STORAGE_NOTIF_ENABLED) === 'true'),
@@ -390,76 +391,92 @@ async function handleToggleNotifications(){
 /* =====================
    Auth
    ===================== */
-
-function handleSignup(){
-  state.authError = null;
-  const f = state.authForm;
-  if(!f.email.trim() || !f.password.trim() || !f.nome.trim() || !f.gender.trim() || !f.dateOfBirth.trim()){
-    state.authError = 'Compila tutti i campi obbligatori.';
-    render();
-    return;
-  }
-  if(f.password.length < 6){
-    state.authError = 'La password deve avere almeno 6 caratteri.';
-    render();
-    return;
-  }
-  if(f.password !== f.confirmPassword){
-    state.authError = 'Le password non coincidono.';
-    render();
-    return;
-  }
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(f.dateOfBirth.trim())){
-    state.authError = 'Data di nascita nel formato YYYY-MM-DD (es. 2000-05-21).';
-    render();
-    return;
-  }
-
-  const newUser = {
-    id: uid(),
-    email: f.email.trim().toLowerCase(),
-    password: f.password,
-    nome: f.nome.trim(),
-    gender: f.gender.trim(),
-    dateOfBirth: f.dateOfBirth.trim(),
-    avatarUrl: f.avatarUrl.trim() || null
-  };
-  state.user = newUser;
-  persist();
-  render();
+async function apiLoginMember(nome, code){
+  const res = await fetch("/.netlify/functions/login_member", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ name: nome, code })
+  });
+  const j = await res.json().catch(()=> ({}));
+  if(!res.ok) throw new Error(j.error || "Login failed");
+  return j.user;
 }
 
-function handleLogin(){
+async function apiSignupMember(nome, birthYear){
+  const res = await fetch("/.netlify/functions/signup_member", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ name: nome, birth_year: Number(birthYear) })
+  });
+  const j = await res.json().catch(()=> ({}));
+  if(!res.ok) throw new Error(j.error || "Signup failed");
+  return j.user;
+}
+
+async function handleSignup(){
   state.authError = null;
   const f = state.authForm;
 
-  if(!f.email.trim() || !f.password.trim()){
-    state.authError = 'Inserisci email e password.';
+  const nome = (f.nome || "").trim();
+  const birthYear = String(f.birthYear || "").trim();
+
+  if(!nome || !birthYear){
+    state.authError = "Inserisci nome e anno di nascita.";
     render();
     return;
   }
 
-  const stored = loadJSON(STORAGE_USER, null);
-  if(!stored){
-    state.authError = 'Nessun account trovato su questo dispositivo. Registrati prima.';
+  const y = Number(birthYear);
+  if(!Number.isInteger(y) || y < 1900 || y > 2100){
+    state.authError = "Anno di nascita non valido (es. 2000).";
     render();
     return;
   }
-  if(stored.email.toLowerCase() === f.email.trim().toLowerCase() && stored.password === f.password){
-    state.user = stored;
+
+  try{
+    const user = await apiSignupMember(nome, y);
+    state.user = user; // {id, nome, member_code}
+    persist();
     render();
-  }else{
-    state.authError = 'Email o password non corretti.';
+    alert(`Registrato! Il tuo codice è: ${user.member_code}`);
+  }catch(e){
+    state.authError = e?.message || String(e);
     render();
   }
 }
+
+
+async function handleLogin(){
+  state.authError = null;
+  const f = state.authForm;
+
+  const nome = (f.nome || "").trim();
+  const code = (f.code || "").trim().toUpperCase();
+
+  if(!nome || !code){
+    state.authError = "Inserisci nome e codice.";
+    render();
+    return;
+  }
+
+  try{
+    const user = await apiLoginMember(nome, code);
+    state.user = user; // {id, nome, member_code}
+    persist();
+    render();
+  }catch(e){
+    state.authError = e?.message || String(e);
+    render();
+  }
+}
+
 
 function handleLogout(){
   localStorage.removeItem(STORAGE_USER);
   state.user = null;
   state.notificationsEnabled = false;
   localStorage.setItem(STORAGE_NOTIF_ENABLED, 'false');
-  state.authForm = { email:'', password:'', confirmPassword:'', nome:'', gender:'', dateOfBirth:'', avatarUrl:'' };
+  state.authForm = { nome:'', code:'', birthYear:'' };
   state.authMode = 'login';
   closeOverlay();
   render();
@@ -881,8 +898,8 @@ function renderAuth(){
       <div style="font-size:28px;font-weight:900;margin-bottom:6px">Benvenuto nel Club di Pallavolo</div>
       <div class="muted small" style="margin-bottom:18px">
         ${a==='login'
-          ? 'Accedi al tuo account per vedere calendario e partecipanti.'
-          : 'Crea il tuo profilo per iniziare ad usare l’app.'}
+          ? 'Accedi con Nome + Codice.'
+          : 'Registrati con Nome + Anno di nascita. Il codice viene generato automaticamente.'}
       </div>
 
       <div class="row" style="border:1px solid var(--border);border-radius:999px;overflow:hidden;margin-bottom:14px">
@@ -891,26 +908,14 @@ function renderAuth(){
       </div>
 
       <div style="display:grid;gap:10px">
-        <input id="email" placeholder="Email" value="${escapeHtml(f.email)}" />
-        <input id="password" type="password" placeholder="Password" value="${escapeHtml(f.password)}" />
+        <input id="nome" placeholder="Nome (es. Sam)" value="${escapeHtml(f.nome)}" />
 
-        ${a==='signup' ? `
-          <input id="confirmPassword" type="password" placeholder="Conferma password" value="${escapeHtml(f.confirmPassword)}" />
-          <input id="nome" placeholder="Nome" value="${escapeHtml(f.nome)}" />
-
-          <div>
-            <div class="small" style="margin-bottom:6px">Genere</div>
-            <div class="row" style="flex-wrap:wrap">
-              ${['M','F','Altro'].map(g => {
-                const selected = f.gender === g;
-                return `<span class="chip ${selected?'sel':''}" data-gender="${g}" style="${selected?'background:var(--accent);border-color:var(--accent);color:#000;font-weight:800':''}">${g}</span>`;
-              }).join('')}
-            </div>
-          </div>
-
-          <input id="dob" placeholder="Data di nascita (YYYY-MM-DD)" value="${escapeHtml(f.dateOfBirth)}" />
-          <input id="avatar" placeholder="URL foto profilo (opzionale)" value="${escapeHtml(f.avatarUrl)}" />
-        ` : ''}
+        ${a==='login' ? `
+          <input id="code" placeholder="Codice (es. SAM-2000)" value="${escapeHtml(f.code)}" />
+        ` : `
+          <input id="birthYear" placeholder="Anno di nascita (es. 2000)" value="${escapeHtml(f.birthYear)}" />
+          <div class="small muted">Il codice sarà: PRIME 3 LETTERE + "-" + ANNO (es. SAM-2000)</div>
+        `}
 
         ${err ? `<div style="color:var(--red);font-size:12px">${escapeHtml(err)}</div>` : ''}
 
@@ -929,21 +934,12 @@ function bindAuth(){
     };
   });
 
-  $('#email').oninput = (e) => state.authForm.email = e.target.value;
-  $('#password').oninput = (e) => state.authForm.password = e.target.value;
+  $('#nome').oninput = (e) => state.authForm.nome = e.target.value;
 
-  if(state.authMode==='signup'){
-    $('#confirmPassword').oninput = (e) => state.authForm.confirmPassword = e.target.value;
-    $('#nome').oninput = (e) => state.authForm.nome = e.target.value;
-    $('#dob').oninput = (e) => state.authForm.dateOfBirth = e.target.value;
-    $('#avatar').oninput = (e) => state.authForm.avatarUrl = e.target.value;
-
-    appEl.querySelectorAll('[data-gender]').forEach(el => {
-      el.onclick = () => {
-        state.authForm.gender = el.getAttribute('data-gender');
-        render();
-      };
-    });
+  if(state.authMode === 'login'){
+    $('#code').oninput = (e) => state.authForm.code = e.target.value;
+  }else{
+    $('#birthYear').oninput = (e) => state.authForm.birthYear = e.target.value;
   }
 
   $('#authSubmit').onclick = () => {
@@ -951,6 +947,8 @@ function bindAuth(){
     else handleSignup();
   };
 }
+
+
 
 function renderCalendarPage(activeDate, isToday){
   const nome = state.user?.nome || 'User';
