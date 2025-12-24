@@ -4,6 +4,7 @@
   "type": "module",
   "dependencies": {
     "@netlify/blobs": "^8.0.0",
-    "web-push": "^3.6.0"
+    "web-push": "^3.6.0",
+    "@supabase/supabase-js": "^2.49.1"
   }
 }

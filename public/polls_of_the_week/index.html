@@ -49,93 +49,180 @@
 </div>
 
 <script>
-/* ===== shared keys (same as main app) ===== */
-const STORAGE_TRAINING_DATA = 'volleyclub_training_data';
-
-/* ===== training rules ===== */
-const TRAINING_WEEKDAYS = [1,2,3,4,6]; // Lun–Gio + Sab
+/* ===== UI + date helpers (same vibe as your current file) ===== */
 const IT = {
   monthNames: ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'],
   dayNames: ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'],
 };
 
-/* ===== helpers ===== */
-function ymd(d){
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
 function parseYMD(s){
   const [y,m,d] = s.split('-').map(Number);
   return new Date(y, m-1, d);
-}
-function startOfWeekMonday(d){
-  const x = new Date(d);
-  const day = (x.getDay()+6)%7;
-  x.setDate(x.getDate()-day);
-  x.setHours(0,0,0,0);
-  return x;
 }
 function formatDateIT(dateStr){
   const d = parseYMD(dateStr);
   return `${IT.dayNames[d.getDay()]} ${d.getDate()} ${IT.monthNames[d.getMonth()]}`;
 }
-function loadTraining(){
-  try{
-    return JSON.parse(localStorage.getItem(STORAGE_TRAINING_DATA)) || {};
-  }catch{ return {}; }
-}
-function saveTraining(td){
-  localStorage.setItem(STORAGE_TRAINING_DATA, JSON.stringify(td));
+
+/* ===== member code stored on device ===== */
+const STORAGE_MEMBER_CODE = "volleyclub_member_code";
+
+let state = {
+  memberCode: localStorage.getItem(STORAGE_MEMBER_CODE) || "",
+  week: null, // { weekId, trainingDates, members, responses }
+};
+
+/* ===== API calls (Netlify Functions) ===== */
+async function apiGetWeek(){
+  const res = await fetch("/.netlify/functions/week", { cache: "no-store" });
+  if(!res.ok){
+    let msg = "week API failed";
+    try{ msg = (await res.json()).error || msg; }catch{}
+    throw new Error(msg);
+  }
+  return res.json();
 }
 
-/* ===== week dates ===== */
-function getWeekTrainingDates(){
-  const monday = startOfWeekMonday(new Date());
-  const out = [];
-  for(let i=0;i<7;i++){
-    const d = new Date(monday);
-    d.setDate(d.getDate()+i);
-    if(TRAINING_WEEKDAYS.includes(d.getDay())){
-      out.push(ymd(d));
-    }
-  }
-  return out;
+async function apiRespond(training_date, status){
+  const res = await fetch("/.netlify/functions/respond", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      member_code: state.memberCode,
+      training_date,
+      status
+    })
+  });
+
+  const j = await res.json().catch(()=> ({}));
+  if(!res.ok) throw new Error(j.error || "respond failed");
+  return j;
+}
+
+/* ===== find current member + current vote ===== */
+function findMyMember(members){
+  const c = state.memberCode.trim();
+  if(!c) return null;
+  return members.find(m => m.member_code === c) || null;
+}
+function myStatusForDate(responses, memberId, dateStr){
+  const r = responses.find(x => x.member_id === memberId && x.training_date === dateStr);
+  return r ? r.status : null;
 }
 
 /* ===== render ===== */
 function render(){
-  const list = document.getElementById('list');
-  const td = loadTraining();
-  const dates = getWeekTrainingDates();
+  const list = document.getElementById("list");
+  list.innerHTML = "";
 
-  list.innerHTML = dates.map(ds=>{
-    const cfg = td[ds] || {};
-    const v = cfg.myAvailability ?? null;
+  // Top card: member code input
+  const top = document.createElement("div");
+  top.className = "card";
+  top.innerHTML = `
+    <div style="font-weight:900;font-size:16px;margin-bottom:8px;color:#f97316">Identificati</div>
+    <div class="muted" style="margin-bottom:10px">
+      Inserisci il tuo <b>codice membro</b> (te lo dà l’admin). Rimane salvato sul telefono.
+    </div>
+    <input id="code"
+      placeholder="Es: SAM-7F2K"
+      value="${state.memberCode.replaceAll('"','&quot;')}"
+      style="width:100%;padding:10px;border-radius:8px;border:1px solid #374151;background:#020617;color:#f9fafb" />
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button id="saveCode" style="padding:10px 12px;border-radius:8px;border:0;background:#f97316;font-weight:800;cursor:pointer">SALVA CODICE</button>
+      <button id="reload" style="padding:10px 12px;border-radius:8px;border:0;background:#2563eb;color:#fff;font-weight:800;cursor:pointer">RICARICA</button>
+      <button id="clearCode" style="padding:10px 12px;border-radius:8px;border:1px solid #4b5563;background:transparent;color:#9ca3af;font-weight:800;cursor:pointer">RESET</button>
+    </div>
+  `;
+  list.appendChild(top);
 
-    return `
-      <div class="card">
-        <div class="date">${formatDateIT(ds)}</div>
-        <div class="chips">
-          <div class="chip yes ${v==='yes'?'sel':''}" data-v="yes" data-d="${ds}">✅ Presente</div>
-          <div class="chip no ${v==='no'?'sel':''}" data-v="no" data-d="${ds}">❌ Assente</div>
-          <div class="chip maybe ${v==='maybe'?'sel':''}" data-v="maybe" data-d="${ds}">❓ Forse</div>
-        </div>
-      </div>
+  document.getElementById("saveCode").onclick = async () => {
+    state.memberCode = document.getElementById("code").value.trim();
+    localStorage.setItem(STORAGE_MEMBER_CODE, state.memberCode);
+    await loadWeekAndRender();
+  };
+  document.getElementById("clearCode").onclick = () => {
+    state.memberCode = "";
+    localStorage.removeItem(STORAGE_MEMBER_CODE);
+    render();
+  };
+  document.getElementById("reload").onclick = loadWeekAndRender;
+
+  // If week not loaded yet
+  if(!state.week){
+    const c = document.createElement("div");
+    c.className = "card";
+    c.innerHTML = `<div class="muted">Caricamento…</div>`;
+    list.appendChild(c);
+    return;
+  }
+
+  const me = findMyMember(state.week.members);
+  if(!me){
+    const c = document.createElement("div");
+    c.className = "card";
+    c.innerHTML = `
+      <div style="font-weight:800">Codice non valido o non inserito.</div>
+      <div class="muted">Inserisci un codice membro corretto per votare.</div>
     `;
-  }).join('');
+    list.appendChild(c);
+    return;
+  }
 
-  document.querySelectorAll('[data-v]').forEach(el=>{
-    el.onclick = ()=>{
-      const d = el.dataset.d;
-      const v = el.dataset.v;
-      td[d] = td[d] || {};
-      td[d].myAvailability = v;
-      saveTraining(td);
-      render();
+  // Header
+  const header = document.createElement("div");
+  header.className = "card";
+  header.innerHTML = `
+    <div style="font-weight:900;font-size:18px;margin-bottom:6px">Ciao ${me.name}</div>
+    <div class="muted">Settimana: <b>${state.week.weekId}</b></div>
+  `;
+  list.appendChild(header);
+
+  // Training days cards
+  for(const dateStr of state.week.trainingDates){
+    const current = myStatusForDate(state.week.responses, me.id, dateStr);
+
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="date">${formatDateIT(dateStr)}</div>
+      <div class="chips">
+        <div class="chip yes ${current==='yes'?'sel':''}" data-date="${dateStr}" data-status="yes">✅ Presente</div>
+        <div class="chip no ${current==='no'?'sel':''}" data-date="${dateStr}" data-status="no">❌ Assente</div>
+        <div class="chip maybe ${current==='maybe'?'sel':''}" data-date="${dateStr}" data-status="maybe">❓ Forse</div>
+      </div>
+      <div class="muted" style="margin-top:8px;font-size:12px">Salvataggio immediato (database).</div>
+    `;
+    list.appendChild(card);
+  }
+
+  // Bind clicks
+  list.querySelectorAll("[data-status]").forEach(el => {
+    el.onclick = async () => {
+      const dateStr = el.getAttribute("data-date");
+      const status = el.getAttribute("data-status");
+      try{
+        await apiRespond(dateStr, status);
+        await loadWeekAndRender(); // refresh to show selected state
+      }catch(e){
+        alert(e?.message || e);
+      }
     };
   });
 }
 
-render();
+async function loadWeekAndRender(){
+  try{
+    state.week = await apiGetWeek();
+  }catch(e){
+    state.week = null;
+    alert("Errore caricamento settimana: " + (e?.message || e));
+  }
+  render();
+}
+
+loadWeekAndRender();
 </script>
+
+
 </body>
 </html>
