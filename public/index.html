@@ -185,9 +185,11 @@
 </div>
 
 <script>
+  navigator.serviceWorker?.register('/sw.js');
 // ===== PUSH CONFIG =====
 // Put your VAPID PUBLIC key here (you will generate it in step 4)
-const VAPID_PUBLIC_KEY = "PASTE_PUBLIC_VAPID_KEY_HERE";
+const VAPID_PUBLIC_KEY = "
+BCTipjxiFUlUNTKXHSv-3BBA60tDJ9k6TZVHmZAIxP6ZxXpn_YMNbCCFMdNd5-bYxzSRIJ8uWJm8UBIAIefGsnA";
 
 // Convert base64 public key to Uint8Array (required by subscribe)
 function urlBase64ToUint8Array(base64String) {
