@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Disponibilità Allenamenti – Settimana</title>
+
+  <style>
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background:#020617;
+      color:#f9fafb;
+    }
+    .app{max-width:720px;margin:0 auto;padding:16px}
+    .card{
+      background:#0b1120;
+      border:1px solid #1f2937;
+      border-radius:12px;
+      padding:16px;
+      margin-bottom:12px;
+    }
+    .title{font-size:22px;font-weight:800;color:#f97316}
+    .date{font-size:16px;font-weight:700;margin-bottom:8px}
+    .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{
+      border:1px solid #4b5563;
+      border-radius:999px;
+      padding:6px 12px;
+      cursor:pointer;
+      font-weight:700;
+      font-size:13px;
+    }
+    .yes.sel{background:#22c55e;color:#000;border-color:#22c55e}
+    .no.sel{background:#ef4444;color:#000;border-color:#ef4444}
+    .maybe.sel{background:#eab308;color:#000;border-color:#eab308}
+    .muted{color:#9ca3af;font-size:13px}
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <div class="title">Disponibilità allenamenti – settimana</div>
+  <div class="muted" style="margin-bottom:16px">
+    Seleziona la tua presenza per ogni allenamento.
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<script>
+/* ===== shared keys (same as main app) ===== */
+const STORAGE_TRAINING_DATA = 'volleyclub_training_data';
+
+/* ===== training rules ===== */
+const TRAINING_WEEKDAYS = [1,2,3,4,6]; // Lun–Gio + Sab
+const IT = {
+  monthNames: ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'],
+  dayNames: ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'],
+};
+
+/* ===== helpers ===== */
+function ymd(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function parseYMD(s){
+  const [y,m,d] = s.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+function startOfWeekMonday(d){
+  const x = new Date(d);
+  const day = (x.getDay()+6)%7;
+  x.setDate(x.getDate()-day);
+  x.setHours(0,0,0,0);
+  return x;
+}
+function formatDateIT(dateStr){
+  const d = parseYMD(dateStr);
+  return `${IT.dayNames[d.getDay()]} ${d.getDate()} ${IT.monthNames[d.getMonth()]}`;
+}
+function loadTraining(){
+  try{
+    return JSON.parse(localStorage.getItem(STORAGE_TRAINING_DATA)) || {};
+  }catch{ return {}; }
+}
+function saveTraining(td){
+  localStorage.setItem(STORAGE_TRAINING_DATA, JSON.stringify(td));
+}
+
+/* ===== week dates ===== */
+function getWeekTrainingDates(){
+  const monday = startOfWeekMonday(new Date());
+  const out = [];
+  for(let i=0;i<7;i++){
+    const d = new Date(monday);
+    d.setDate(d.getDate()+i);
+    if(TRAINING_WEEKDAYS.includes(d.getDay())){
+      out.push(ymd(d));
+    }
+  }
+  return out;
+}
+
+/* ===== render ===== */
+function render(){
+  const list = document.getElementById('list');
+  const td = loadTraining();
+  const dates = getWeekTrainingDates();
+
+  list.innerHTML = dates.map(ds=>{
+    const cfg = td[ds] || {};
+    const v = cfg.myAvailability ?? null;
+
+    return `
+      <div class="card">
+        <div class="date">${formatDateIT(ds)}</div>
+        <div class="chips">
+          <div class="chip yes ${v==='yes'?'sel':''}" data-v="yes" data-d="${ds}">✅ Presente</div>
+          <div class="chip no ${v==='no'?'sel':''}" data-v="no" data-d="${ds}">❌ Assente</div>
+          <div class="chip maybe ${v==='maybe'?'sel':''}" data-v="maybe" data-d="${ds}">❓ Forse</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  document.querySelectorAll('[data-v]').forEach(el=>{
+    el.onclick = ()=>{
+      const d = el.dataset.d;
+      const v = el.dataset.v;
+      td[d] = td[d] || {};
+      td[d].myAvailability = v;
+      saveTraining(td);
+      render();
+    };
+  });
+}
+
+render();
+</script>
+</body>
+</html>
