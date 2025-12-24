@@ -1,0 +1,1102 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Club Pallavolo</title>
+  <style>
+    :root{
+      --bg:#020617;
+      --card:#0b1120;
+      --border:#1f2937;
+      --text:#f9fafb;
+      --muted:#9ca3af;
+      --disabled:#4b5563;
+      --accent:#f97316;
+      --blue:#2563eb;
+      --green:#22c55e;
+      --red:#ef4444;
+      --yellow:#eab308;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background:var(--bg);
+      color:var(--text);
+    }
+    .app{max-width:960px;margin:0 auto;padding:16px}
+    .row{display:flex;gap:8px;align-items:center}
+    .between{justify-content:space-between}
+    .tabs{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .tab{
+      flex:1;
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:8px 10px;
+      text-align:center;
+      color:var(--muted);
+      cursor:pointer;
+      user-select:none;
+    }
+    .tab.active{
+      background:var(--accent);
+      border-color:var(--accent);
+      color:#000;
+      font-weight:700;
+    }
+    .btn{
+      border:0;
+      border-radius:8px;
+      padding:10px 12px;
+      cursor:pointer;
+      font-weight:700;
+      color:#000;
+      background:var(--accent);
+    }
+    .btn.secondary{background:var(--blue); color:#fff}
+    .btn.danger{background:var(--red); color:#fff}
+    .btn.ghost{
+      background:transparent;
+      color:var(--muted);
+      border:1px solid var(--disabled);
+      font-weight:600;
+      padding:6px 10px;
+      border-radius:6px;
+    }
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:16px;
+    }
+    .hero{margin:12px 0 16px}
+    .hero .l1{font-size:32px;font-weight:800}
+    .hero .l2{font-size:18px;font-weight:800;color:var(--accent);margin-top:4px}
+    .muted{color:var(--muted)}
+    .small{font-size:12px}
+    input{
+      width:100%;
+      background:var(--bg);
+      border:1px solid #374151;
+      border-radius:8px;
+      padding:10px 10px;
+      color:var(--text);
+      outline:none;
+    }
+    label{font-size:12px;color:var(--muted)}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .divider{height:1px;background:var(--border);margin:10px 0}
+    .calendarWrap{padding:12px}
+    .calHeader{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .calHeader .title{font-weight:800}
+    .calGrid{
+      display:grid;
+      grid-template-columns:repeat(7, 1fr);
+      gap:6px;
+    }
+    .dow{
+      font-size:12px;
+      color:var(--disabled);
+      text-align:center;
+      padding:6px 0;
+    }
+    .day{
+      border-radius:8px;
+      border:1px solid var(--border);
+      min-height:54px;
+      padding:6px 6px 4px;
+      cursor:pointer;
+      user-select:none;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+    }
+    .day.disabled{opacity:.35; cursor:not-allowed}
+    .day.selected{background:var(--accent); border-color:var(--accent); color:#000}
+    .dayNum{font-size:14px}
+    .dayIcon{font-size:14px;text-align:center;min-height:16px}
+    .infoTitle{font-weight:800;text-transform:uppercase;color:var(--accent)}
+    .infoDate{font-size:20px;font-weight:700;text-transform:lowercase;margin:6px 0 12px}
+    .sectionTitle{font-weight:800;margin-bottom:4px}
+    .chipRow{display:flex;gap:6px;flex-wrap:wrap}
+    .chip{
+      border:1px solid var(--disabled);
+      border-radius:999px;
+      padding:2px 8px;
+      font-size:11px;
+      color:#d1d5db;
+      cursor:pointer;
+      user-select:none;
+    }
+    .chip.yes.sel{background:var(--green); border-color:var(--green); color:#000; font-weight:800}
+    .chip.no.sel{background:var(--red); border-color:var(--red); color:#000; font-weight:800}
+    .chip.maybe.sel{background:var(--yellow); border-color:var(--yellow); color:#000; font-weight:800}
+    .list{max-height:260px;overflow:auto}
+    .pRow{
+      display:flex;gap:8px;align-items:center;
+      padding:8px 0;border-bottom:1px solid var(--border);
+    }
+    .overlay{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.6);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+    }
+    .overlay.open{display:flex}
+    .modal{
+      width:min(920px, 96vw);
+      height:min(720px, 88vh);
+      background:var(--bg);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:16px;
+      overflow:auto;
+    }
+    .teamChip{
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:4px 10px;
+      display:flex;gap:6px;align-items:center;
+    }
+    .xBtn{cursor:pointer;color:inherit;opacity:.85}
+    .pill{
+      border-radius:999px;
+      padding:3px 10px;
+      font-size:12px;
+      font-weight:800;
+      display:inline-block;
+    }
+    .pill.green{background:var(--green); color:#000}
+    .pill.red{background:var(--red); color:#000}
+    .pill.yellow{background:var(--yellow); color:#000}
+  </style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal"></div>
+</div>
+
+<script>
+  // =====================
+  // Constants & Helpers
+  // =====================
+  const STORAGE_PARTICIPANTS = 'volleyclub_participants';
+  const STORAGE_TRAINING_DATA = 'volleyclub_training_data';
+  const STORAGE_USER = 'volleyclub_user';
+  const STORAGE_NOTIF_ENABLED = 'volleyclub_notif_enabled';
+
+  // JS: 0=Dom ... 6=Sab
+  const TRAINING_WEEKDAYS = [1,2,3,4,6]; // Lun-Gio + Sab
+  const TRAINING_SLOTS = {
+    1: [{start:18.0,end:19.5},{start:19.5,end:21.0},{start:21.0,end:22.5}],
+    2: [{start:18.0,end:19.5},{start:19.5,end:21.0},{start:21.0,end:22.5}],
+    3: [{start:18.0,end:19.5},{start:19.5,end:21.0},{start:21.0,end:22.5}],
+    4: [{start:18.0,end:19.5},{start:19.5,end:21.0},{start:21.0,end:22.5}],
+    6: [{start:9.5,end:11.0},{start:11.0,end:12.5}],
+  };
+  const MAX_PER_SLOT = 8;
+  const TEAM_COLORS = ['#22c55e','#3b82f6','#eab308','#ec4899','#a855f7','#f97316'];
+
+  const IT = {
+    monthNames: ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'],
+    dayNames: ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'],
+    dayNamesShort: ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'],
+  };
+
+  const $ = (sel) => document.querySelector(sel);
+  const appEl = $('#app');
+  const overlayEl = $('#overlay');
+  const modalEl = $('#modal');
+
+  function uid(){ return String(Date.now()) + '_' + Math.random().toString(16).slice(2); }
+  function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
+
+  function loadJSON(key, fallback){
+    try{
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    }catch(e){ return fallback; }
+  }
+  function saveJSON(key, value){
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+
+  function ymd(d){
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  function parseYMD(s){
+    // force local date to avoid timezone shifts
+    const [y,m,d] = s.split('-').map(Number);
+    return new Date(y, m-1, d);
+  }
+  function isTrainingDay(dateStr){
+    const d = parseYMD(dateStr);
+    return TRAINING_WEEKDAYS.includes(d.getDay());
+  }
+  function isMatchDay(dateStr){
+    const d = parseYMD(dateStr);
+    return d.getDay() === 0;
+  }
+  function getSlotsForDate(dateStr){
+    const d = parseYMD(dateStr);
+    return TRAINING_SLOTS[d.getDay()] || [];
+  }
+  function formatHourLabel(hourFloat){
+    const h = Math.floor(hourFloat);
+    const minutes = Math.round((hourFloat - h) * 60);
+    const mm = String(minutes).padStart(2,'0');
+    return `${String(h).padStart(2,'0')}:${mm}`;
+  }
+  function formatSlotLabel(s){
+    return `${formatHourLabel(s.start)}–${formatHourLabel(s.end)}`;
+  }
+  function formatFullItalianDate(dateStr){
+    const d = parseYMD(dateStr);
+    const weekday = IT.dayNames[d.getDay()].toLowerCase();
+    const day = d.getDate();
+    const month = IT.monthNames[d.getMonth()].toLowerCase();
+    const year = d.getFullYear();
+    return `${weekday} ${day} ${month} ${year}`;
+  }
+
+  // =====================
+  // App State
+  // =====================
+  let state = {
+    user: loadJSON(STORAGE_USER, null),
+    authMode: 'login',
+    authError: null,
+    authForm: {
+      email:'', password:'', confirmPassword:'',
+      nome:'', gender:'', dateOfBirth:'', avatarUrl:''
+    },
+
+    notificationsEnabled: (localStorage.getItem(STORAGE_NOTIF_ENABLED) === 'true'),
+
+    activePage: 'calendar',
+    selectedDate: null,
+
+    participants: loadJSON(STORAGE_PARTICIPANTS, []),
+    participantForm: { nome:'', cognome:'', genere:'', eta:'', livello:'' },
+
+    trainingData: loadJSON(STORAGE_TRAINING_DATA, {}),
+
+    trainingDate: null,
+    newTeamName: '',
+  };
+
+  function persist(){
+    saveJSON(STORAGE_PARTICIPANTS, state.participants);
+    saveJSON(STORAGE_TRAINING_DATA, state.trainingData);
+    if(state.user) saveJSON(STORAGE_USER, state.user);
+    localStorage.setItem(STORAGE_NOTIF_ENABLED, state.notificationsEnabled ? 'true' : 'false');
+  }
+
+  // =====================
+  // Web notifications (optional)
+  // =====================
+  async function ensureWebNotificationPermission(){
+    if(!('Notification' in window)) return false;
+    if(Notification.permission === 'granted') return true;
+    const p = await Notification.requestPermission();
+    return p === 'granted';
+  }
+
+  // This is NOT the same as Expo weekly scheduling.
+  // Browsers don't reliably support background weekly notifications without a service worker + push.
+  // We'll keep a simple "test notification" when you enable the toggle.
+  async function handleToggleNotifications(){
+    if(!state.notificationsEnabled){
+      const ok = await ensureWebNotificationPermission();
+      if(!ok){
+        alert('Permessi notifiche non concessi dal browser.');
+        return;
+      }
+      state.notificationsEnabled = true;
+      persist();
+      new Notification('Promemoria allenamento 🏐', { body: 'Notifiche abilitate su questo browser.' });
+    }else{
+      state.notificationsEnabled = false;
+      persist();
+      alert('Notifiche disabilitate (su web non posso cancellare schedule come Expo).');
+    }
+    render();
+  }
+
+  // =====================
+  // Auth
+  // =====================
+  function handleSignup(){
+    state.authError = null;
+    const f = state.authForm;
+    if(!f.email.trim() || !f.password.trim() || !f.nome.trim() || !f.gender.trim() || !f.dateOfBirth.trim()){
+      state.authError = 'Compila tutti i campi obbligatori.';
+      render();
+      return;
+    }
+    if(f.password.length < 6){
+      state.authError = 'La password deve avere almeno 6 caratteri.';
+      render();
+      return;
+    }
+    if(f.password !== f.confirmPassword){
+      state.authError = 'Le password non coincidono.';
+      render();
+      return;
+    }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(f.dateOfBirth.trim())){
+      state.authError = 'Data di nascita nel formato YYYY-MM-DD (es. 2000-05-21).';
+      render();
+      return;
+    }
+
+    const newUser = {
+      id: uid(),
+      email: f.email.trim().toLowerCase(),
+      password: f.password,
+      nome: f.nome.trim(),
+      gender: f.gender.trim(),
+      dateOfBirth: f.dateOfBirth.trim(),
+      avatarUrl: f.avatarUrl.trim() || null
+    };
+    state.user = newUser;
+    persist();
+    render();
+  }
+
+  function handleLogin(){
+    state.authError = null;
+    const f = state.authForm;
+
+    if(!f.email.trim() || !f.password.trim()){
+      state.authError = 'Inserisci email e password.';
+      render();
+      return;
+    }
+
+    const stored = loadJSON(STORAGE_USER, null);
+    if(!stored){
+      state.authError = 'Nessun account trovato su questo dispositivo. Registrati prima.';
+      render();
+      return;
+    }
+    if(stored.email.toLowerCase() === f.email.trim().toLowerCase() && stored.password === f.password){
+      state.user = stored;
+      render();
+    }else{
+      state.authError = 'Email o password non corretti.';
+      render();
+    }
+  }
+
+  function handleLogout(){
+    localStorage.removeItem(STORAGE_USER);
+    state.user = null;
+    state.notificationsEnabled = false;
+    localStorage.setItem(STORAGE_NOTIF_ENABLED, 'false');
+    state.authForm = { email:'', password:'', confirmPassword:'', nome:'', gender:'', dateOfBirth:'', avatarUrl:'' };
+    state.authMode = 'login';
+    closeOverlay();
+    render();
+  }
+
+  // =====================
+  // Participants
+  // =====================
+  function addParticipant(){
+    const f = state.participantForm;
+    if(!f.nome.trim() || !f.cognome.trim() || !f.genere.trim() || !f.eta.trim() || !f.livello.trim()){
+      return;
+    }
+    const lvl = Number(f.livello);
+    if(Number.isNaN(lvl) || lvl < 0 || lvl > 5) return;
+
+    const p = { id: uid(), nome:f.nome.trim(), cognome:f.cognome.trim(), genere:f.genere.trim(), eta:f.eta.trim(), livello:String(lvl) };
+    state.participants = [...state.participants, p];
+    state.participantForm = { nome:'', cognome:'', genere:'', eta:'', livello:'' };
+    persist();
+    render();
+  }
+
+  function removeParticipant(id){
+    state.participants = state.participants.filter(p => p.id !== id);
+
+    // remove from trainingData maps
+    const td = {...state.trainingData};
+    for(const dateKey of Object.keys(td)){
+      const cfg = td[dateKey];
+      if(cfg.assignments && cfg.assignments[id] !== undefined) delete cfg.assignments[id];
+      if(cfg.availability && cfg.availability[id] !== undefined) delete cfg.availability[id];
+      if(cfg.slotAssignments && cfg.slotAssignments[id] !== undefined) delete cfg.slotAssignments[id];
+      td[dateKey] = cfg;
+    }
+    state.trainingData = td;
+    persist();
+    render();
+  }
+
+  // =====================
+  // Training view
+  // =====================
+  function ensureTrainingConfig(dateStr){
+    const td = {...state.trainingData};
+    if(!td[dateStr]){
+      td[dateStr] = {
+        teams: ['Squadra A','Squadra B'],
+        assignments: {},
+        availability: {},
+        myAvailability: null,
+        slotAssignments: {}
+      };
+    }
+    state.trainingData = td;
+    persist();
+  }
+
+  function openTrainingView(dateStr){
+    if(!isTrainingDay(dateStr)) return;
+    ensureTrainingConfig(dateStr);
+    state.trainingDate = dateStr;
+    renderOverlay();
+  }
+
+  function updateTrainingConfig(dateStr, updater){
+    const td = {...state.trainingData};
+    td[dateStr] = updater(td[dateStr]);
+    state.trainingData = td;
+    persist();
+  }
+
+  function cycleTeam(dateStr, participantId){
+    const cfg = state.trainingData[dateStr];
+    const teams = cfg.teams || [];
+    if(!teams.length) return;
+
+    const current = (cfg.assignments && cfg.assignments[participantId]) ?? null;
+    let next = null;
+    if(current === null) next = teams[0];
+    else{
+      const idx = teams.indexOf(current);
+      if(idx === -1 || idx === teams.length - 1) next = null;
+      else next = teams[idx + 1];
+    }
+
+    updateTrainingConfig(dateStr, (c) => ({
+      ...c,
+      assignments: { ...(c.assignments||{}), [participantId]: next }
+    }));
+    renderOverlay();
+  }
+
+  function setAvailability(dateStr, participantId, status){
+    updateTrainingConfig(dateStr, (c) => ({
+      ...c,
+      availability: { ...(c.availability||{}), [participantId]: status }
+    }));
+    renderOverlay();
+  }
+
+  function countAssignedInSlot(dateStr, slotIndex){
+    const cfg = state.trainingData[dateStr];
+    const map = cfg.slotAssignments || {};
+    let c = 0;
+    for(const pid of Object.keys(map)){
+      if(map[pid] === slotIndex) c++;
+    }
+    return c;
+  }
+
+  function cycleSlot(dateStr, participantId){
+    const cfg = state.trainingData[dateStr];
+    const slots = getSlotsForDate(dateStr);
+    const slotCount = slots.length;
+    if(!slotCount) return;
+
+    const current = (cfg.slotAssignments && cfg.slotAssignments[participantId] !== undefined)
+      ? cfg.slotAssignments[participantId]
+      : null;
+
+    let next = null;
+    if(current === null) next = 0;
+    else if(current >= 0 && current < slotCount - 1) next = current + 1;
+    else next = null;
+
+    if(next !== null){
+      const already = countAssignedInSlot(dateStr, next);
+      if(already >= MAX_PER_SLOT){
+        alert(`Turno pieno: questo turno ha già ${MAX_PER_SLOT} persone.`);
+        return;
+      }
+    }
+
+    updateTrainingConfig(dateStr, (c) => ({
+      ...c,
+      slotAssignments: { ...(c.slotAssignments||{}), [participantId]: next }
+    }));
+    renderOverlay();
+  }
+
+  function addTeam(dateStr){
+    const name = state.newTeamName.trim();
+    if(!name) return;
+    updateTrainingConfig(dateStr, (c) => {
+      if((c.teams||[]).includes(name)) return c;
+      return { ...c, teams: [...(c.teams||[]), name] };
+    });
+    state.newTeamName = '';
+    renderOverlay();
+  }
+
+  function removeTeam(dateStr, teamId){
+    updateTrainingConfig(dateStr, (c) => {
+      const newTeams = (c.teams||[]).filter(t => t !== teamId);
+      if(!newTeams.length) return c;
+
+      const newAssignments = {...(c.assignments||{})};
+      for(const pid of Object.keys(newAssignments)){
+        if(newAssignments[pid] === teamId) newAssignments[pid] = null;
+      }
+      return { ...c, teams: newTeams, assignments: newAssignments };
+    });
+    renderOverlay();
+  }
+
+  // =====================
+  // Maps
+  // =====================
+  function openMaps(){
+    const query = encodeURIComponent('Palestra di Villaverla');
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${query}`;
+    window.open(url, '_blank');
+  }
+
+  // =====================
+  // Calendar rendering
+  // =====================
+  function buildMonthCells(year, monthIndex){
+    const first = new Date(year, monthIndex, 1);
+    const startDow = (first.getDay() + 6) % 7; // Monday=0
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+
+    const cells = [];
+    for(let i=0;i<startDow;i++) cells.push(null);
+    for(let d=1; d<=daysInMonth; d++){
+      const dt = new Date(year, monthIndex, d);
+      cells.push(dt);
+    }
+    while(cells.length % 7 !== 0) cells.push(null);
+    return cells;
+  }
+
+  // =====================
+  // Overlay
+  // =====================
+  function closeOverlay(){
+    overlayEl.classList.remove('open');
+    state.trainingDate = null;
+    state.newTeamName = '';
+  }
+  overlayEl.addEventListener('click', (e) => {
+    if(e.target === overlayEl) closeOverlay();
+  });
+
+  function renderOverlay(){
+    if(!state.trainingDate) return;
+    const dateStr = state.trainingDate;
+    const cfg = state.trainingData[dateStr];
+
+    const slots = getSlotsForDate(dateStr);
+
+    // summary availability
+    const avail = cfg.availability || {};
+    let yes=0,no=0,unk=0;
+    for(const p of state.participants){
+      const s = avail[p.id];
+      if(s === 'yes') yes++;
+      else if(s === 'no') no++;
+      else unk++;
+    }
+
+    modalEl.innerHTML = `
+      <div class="row between">
+        <div>
+          <div style="font-size:20px;font-weight:800;color:var(--accent)">Allenamento</div>
+          <div style="font-size:14px">${formatFullItalianDate(dateStr)}</div>
+        </div>
+        <button class="btn" id="closeModal">SALVA E CHIUDI</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div style="margin-bottom:6px">
+        <div style="font-weight:800">Squadre</div>
+        <div class="small muted">Puoi creare più squadre per gestire diversi campi o partite.</div>
+      </div>
+
+      <div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        ${(cfg.teams||[]).map((t,idx) => {
+          const color = TEAM_COLORS[idx % TEAM_COLORS.length] || '#22c55e';
+          const canDel = (cfg.teams||[]).length > 1;
+          return `
+            <div class="teamChip" style="border-color:${color}">
+              <span style="color:${color};font-weight:800;font-size:12px">${t}</span>
+              ${canDel ? `<span class="xBtn" data-delteam="${t}" style="color:${color}">×</span>` : ``}
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="row" style="gap:8px;margin-bottom:10px">
+        <input id="newTeamName" placeholder="Nome nuova squadra (es. Squadra C)" value="${escapeHtml(state.newTeamName)}" />
+        <button class="btn" id="addTeamBtn">Aggiungi</button>
+      </div>
+
+      <div class="small muted" style="margin-bottom:10px">
+        Presenze: ✅ ${yes} • ❌ ${no} • ❓ ${unk}
+      </div>
+
+      <div class="divider"></div>
+
+      <div>
+        ${(state.participants.length === 0)
+          ? `<div class="muted">Nessun partecipante registrato.</div>`
+          : state.participants.map((p) => {
+              const team = (cfg.assignments && cfg.assignments[p.id]) ?? null;
+              const slotIdx = (cfg.slotAssignments && cfg.slotAssignments[p.id] !== undefined) ? cfg.slotAssignments[p.id] : null;
+              const slotLabel = slotIdx === null ? 'Nessun turno' : `Turno ${slotIdx+1}`;
+              const slotColor = slotIdx === null ? 'var(--disabled)' : 'var(--green)';
+
+              let teamLabel = 'Nessuna squadra';
+              let teamColor = 'var(--disabled)';
+              if(team){
+                const idx = (cfg.teams||[]).indexOf(team);
+                const c = idx >= 0 ? TEAM_COLORS[idx % TEAM_COLORS.length] : '#22c55e';
+                teamLabel = team;
+                teamColor = c;
+              }
+              const as = (cfg.availability && cfg.availability[p.id]) ?? null;
+
+              const slotLine = (slotIdx !== null && slots[slotIdx])
+                ? `<div class="small muted" style="text-align:right">${formatSlotLabel(slots[slotIdx])}</div>`
+                : '';
+
+              return `
+                <div class="pRow">
+                  <div style="flex:1">
+                    <div style="font-weight:800">${escapeHtml(p.nome)} ${escapeHtml(p.cognome)}</div>
+                    <div class="small muted">Genere: ${escapeHtml(p.genere)} • Età: ${escapeHtml(p.eta)} • Livello: ${escapeHtml(p.livello)}/5</div>
+
+                    <div class="chipRow" style="margin-top:6px">
+                      <span class="chip yes ${as==='yes'?'sel':''}" data-av="yes" data-pid="${p.id}">✅ Presente</span>
+                      <span class="chip no ${as==='no'?'sel':''}" data-av="no" data-pid="${p.id}">❌ Assente</span>
+                      <span class="chip maybe ${as==='maybe'?'sel':''}" data-av="maybe" data-pid="${p.id}">❓ Forse</span>
+                    </div>
+                  </div>
+
+                  <div style="min-width:160px;text-align:right">
+                    <div style="cursor:pointer;font-weight:800;font-size:12px;color:${teamColor}" data-cycleteam="${p.id}">
+                      ${escapeHtml(teamLabel)}
+                    </div>
+                    <div style="cursor:pointer;font-weight:800;font-size:12px;color:${slotColor};margin-top:4px" data-cycleslot="${p.id}">
+                      ${escapeHtml(slotLabel)}
+                    </div>
+                    ${slotLine}
+                  </div>
+                </div>
+              `;
+          }).join('')
+        }
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="small muted">
+        Cap turni: max ${MAX_PER_SLOT} persone per turno.
+      </div>
+    `;
+
+    overlayEl.classList.add('open');
+
+    $('#closeModal').onclick = () => closeOverlay();
+
+    $('#newTeamName').oninput = (e) => { state.newTeamName = e.target.value; };
+    $('#addTeamBtn').onclick = () => addTeam(dateStr);
+
+    // remove team
+    modalEl.querySelectorAll('[data-delteam]').forEach(el => {
+      el.onclick = () => removeTeam(dateStr, el.getAttribute('data-delteam'));
+    });
+
+    // availability
+    modalEl.querySelectorAll('[data-av]').forEach(el => {
+      el.onclick = () => setAvailability(dateStr, el.getAttribute('data-pid'), el.getAttribute('data-av'));
+    });
+
+    // cycle team / slot
+    modalEl.querySelectorAll('[data-cycleteam]').forEach(el => {
+      el.onclick = () => cycleTeam(dateStr, el.getAttribute('data-cycleteam'));
+    });
+    modalEl.querySelectorAll('[data-cycleslot]').forEach(el => {
+      el.onclick = () => cycleSlot(dateStr, el.getAttribute('data-cycleslot'));
+    });
+  }
+
+  function escapeHtml(s){
+    return String(s ?? '')
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'","&#039;");
+  }
+
+  // =====================
+  // Main render
+  // =====================
+  function render(){
+    const today = ymd(new Date());
+    const activeDate = state.selectedDate || today;
+    const isToday = activeDate === today;
+
+    if(!state.user){
+      appEl.innerHTML = renderAuth();
+      bindAuth();
+      return;
+    }
+
+    appEl.innerHTML = `
+      <div class="tabs">
+        <div class="tab ${state.activePage==='calendar'?'active':''}" data-tab="calendar">CALENDARIO</div>
+        <div class="tab ${state.activePage==='participants'?'active':''}" data-tab="participants">PARTECIPANTI</div>
+        <button class="btn ghost" id="logoutBtn">Logout</button>
+      </div>
+
+      ${state.activePage==='calendar' ? renderCalendarPage(activeDate, isToday) : renderParticipantsPage()}
+    `;
+
+    appEl.querySelectorAll('[data-tab]').forEach(el => {
+      el.onclick = () => { state.activePage = el.getAttribute('data-tab'); render(); };
+    });
+    $('#logoutBtn').onclick = handleLogout;
+
+    if(state.activePage==='calendar'){
+      bindCalendar(activeDate);
+    }else{
+      bindParticipants();
+    }
+  }
+
+  function renderAuth(){
+    const a = state.authMode;
+    const err = state.authError;
+    const f = state.authForm;
+
+    return `
+      <div class="card" style="padding:24px">
+        <div style="font-size:28px;font-weight:900;margin-bottom:6px">Benvenuto nel Club di Pallavolo</div>
+        <div class="muted small" style="margin-bottom:18px">
+          ${a==='login'
+            ? 'Accedi al tuo account per vedere calendario e partecipanti.'
+            : 'Crea il tuo profilo per iniziare ad usare l’app.'}
+        </div>
+
+        <div class="row" style="border:1px solid var(--border);border-radius:999px;overflow:hidden;margin-bottom:14px">
+          <div class="tab ${a==='login'?'active':''}" style="border:0" data-auth="login">LOGIN</div>
+          <div class="tab ${a==='signup'?'active':''}" style="border:0" data-auth="signup">REGISTRAZIONE</div>
+        </div>
+
+        <div style="display:grid;gap:10px">
+          <input id="email" placeholder="Email" value="${escapeHtml(f.email)}" />
+          <input id="password" type="password" placeholder="Password" value="${escapeHtml(f.password)}" />
+
+          ${a==='signup' ? `
+            <input id="confirmPassword" type="password" placeholder="Conferma password" value="${escapeHtml(f.confirmPassword)}" />
+            <input id="nome" placeholder="Nome" value="${escapeHtml(f.nome)}" />
+
+            <div>
+              <div class="small" style="margin-bottom:6px">Genere</div>
+              <div class="row" style="flex-wrap:wrap">
+                ${['M','F','Altro'].map(g => {
+                  const selected = f.gender === g;
+                  return `<span class="chip ${selected?'sel':''}" data-gender="${g}" style="${selected?'background:var(--accent);border-color:var(--accent);color:#000;font-weight:800':''}">${g}</span>`;
+                }).join('')}
+              </div>
+            </div>
+
+            <input id="dob" placeholder="Data di nascita (YYYY-MM-DD)" value="${escapeHtml(f.dateOfBirth)}" />
+            <input id="avatar" placeholder="URL foto profilo (opzionale)" value="${escapeHtml(f.avatarUrl)}" />
+          ` : ''}
+
+          ${err ? `<div style="color:var(--red);font-size:12px">${escapeHtml(err)}</div>` : ''}
+
+          <button class="btn" id="authSubmit">${a==='login' ? 'Accedi' : 'Crea account'}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindAuth(){
+    appEl.querySelectorAll('[data-auth]').forEach(el => {
+      el.onclick = () => {
+        state.authMode = el.getAttribute('data-auth');
+        state.authError = null;
+        render();
+      };
+    });
+
+    $('#email').oninput = (e) => state.authForm.email = e.target.value;
+    $('#password').oninput = (e) => state.authForm.password = e.target.value;
+
+    if(state.authMode==='signup'){
+      $('#confirmPassword').oninput = (e) => state.authForm.confirmPassword = e.target.value;
+      $('#nome').oninput = (e) => state.authForm.nome = e.target.value;
+      $('#dob').oninput = (e) => state.authForm.dateOfBirth = e.target.value;
+      $('#avatar').oninput = (e) => state.authForm.avatarUrl = e.target.value;
+
+      appEl.querySelectorAll('[data-gender]').forEach(el => {
+        el.onclick = () => {
+          state.authForm.gender = el.getAttribute('data-gender');
+          render();
+        };
+      });
+    }
+
+    $('#authSubmit').onclick = () => {
+      if(state.authMode==='login') handleLogin();
+      else handleSignup();
+    };
+  }
+
+  function renderCalendarPage(activeDate, isToday){
+    const nome = state.user?.nome || 'User';
+    const d = parseYMD(activeDate);
+    if(!state._calYM){
+      state._calYM = { y: d.getFullYear(), m: d.getMonth() };
+    }
+    const {y, m} = state._calYM;
+
+    const training = isTrainingDay(activeDate);
+    const match = isMatchDay(activeDate);
+
+    // my availability label
+    const cfg = state.trainingData[activeDate];
+    const my = cfg ? (cfg.myAvailability ?? null) : null;
+    let myLabel = 'non specificata';
+    let pill = '';
+    if(my==='yes'){ myLabel='✅ Presente'; pill = `<span class="pill green">${myLabel}</span>`; }
+    else if(my==='no'){ myLabel='❌ Assente'; pill = `<span class="pill red">${myLabel}</span>`; }
+    else if(my==='maybe'){ myLabel='❓ Forse'; pill = `<span class="pill yellow">${myLabel}</span>`; }
+    else pill = `<span class="muted">${myLabel}</span>`;
+
+    return `
+      <div class="hero">
+        <div class="l1">CIAO, ${escapeHtml(nome).toUpperCase()}!</div>
+        <div class="l2">BENVENUTO NEL TUO CLUB DI PALLAVOLO!</div>
+      </div>
+
+      <div class="row between" style="margin-bottom:10px">
+        <div class="row">
+          <button class="btn" id="todayBtn">OGGI</button>
+          <button class="btn secondary" id="mapsBtn">NAVIGA VERSO</button>
+        </div>
+
+        <div class="row" style="gap:10px">
+          <div class="small">Promemoria allenamento</div>
+          <label class="row" style="gap:8px;cursor:pointer;user-select:none">
+            <input type="checkbox" id="notifToggle" ${state.notificationsEnabled?'checked':''} />
+            <span class="muted small">${state.notificationsEnabled?'ON':'OFF'}</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="card calendarWrap">
+        <div class="calHeader">
+          <button class="btn ghost" id="prevMonth">←</button>
+          <div class="title">${IT.monthNames[m]} ${y}</div>
+          <button class="btn ghost" id="nextMonth">→</button>
+        </div>
+
+        <div class="calGrid">
+          ${IT.dayNamesShort.slice(1).concat(IT.dayNamesShort[0]).map(n => `<div class="dow">${n}</div>`).join('')}
+          ${renderMonthGrid(y,m,activeDate)}
+        </div>
+
+        <div class="small muted" style="margin-top:8px">
+          🏐 = allenamento (Lun-Gio, Sab) • ⭐ = partita (Domenica)
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="infoTitle" style="font-size:${isToday?26:14}">${isToday?'OGGI':'GIORNO SELEZIONATO'}</div>
+        <div class="infoDate">${formatFullItalianDate(activeDate)}</div>
+
+        <div>
+          <div class="row between" style="margin-bottom:6px">
+            <div class="sectionTitle">🏐 Allenamenti</div>
+            ${training ? `<button class="btn" style="background:var(--green)" id="openTraining">APRI ALLENAMENTO</button>` : ''}
+          </div>
+          <div>
+            ${training
+              ? `Turni: ${getSlotsForDate(activeDate).map(formatSlotLabel).join(' / ')}`
+              : 'Nessun allenamento programmato.'}
+          </div>
+          <div style="margin-top:8px" class="row">
+            <div class="muted">La tua presenza:</div>
+            <div>${pill}</div>
+          </div>
+          ${training ? `<div class="small muted" style="margin-top:4px">Su web non ho lo swipe; usa i pulsanti dentro "Allenamento".</div>` : ``}
+        </div>
+
+        <div class="divider"></div>
+
+        <div>
+          <div class="sectionTitle">⭐ Partite</div>
+          <div>${match ? 'Partita in programma!' : 'Nessuna partita in calendario.'}</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div>
+          <div class="sectionTitle">Note</div>
+          <div>Nessuna nota per questo giorno.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderMonthGrid(y,m,activeDate){
+    const cells = buildMonthCells(y,m);
+    return cells.map((dt) => {
+      if(!dt){
+        return `<div class="day disabled" style="visibility:hidden"></div>`;
+      }
+      const dateStr = ymd(dt);
+      const training = isTrainingDay(dateStr);
+      const match = isMatchDay(dateStr);
+      const selected = dateStr === activeDate;
+
+      const icon = match ? '⭐' : (training ? '🏐' : '');
+      return `
+        <div class="day ${selected?'selected':''}" data-day="${dateStr}">
+          <div class="dayNum">${dt.getDate()}</div>
+          <div class="dayIcon">${icon}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function bindCalendar(activeDate){
+    $('#todayBtn').onclick = () => { state.selectedDate = null; render(); };
+    $('#mapsBtn').onclick = openMaps;
+
+    $('#notifToggle').onchange = handleToggleNotifications;
+
+    $('#prevMonth').onclick = () => {
+      state._calYM.m -= 1;
+      if(state._calYM.m < 0){ state._calYM.m = 11; state._calYM.y -= 1; }
+      render();
+    };
+    $('#nextMonth').onclick = () => {
+      state._calYM.m += 1;
+      if(state._calYM.m > 11){ state._calYM.m = 0; state._calYM.y += 1; }
+      render();
+    };
+
+    appEl.querySelectorAll('[data-day]').forEach(el => {
+      el.onclick = () => {
+        state.selectedDate = el.getAttribute('data-day');
+        render();
+      };
+    });
+
+    const openBtn = $('#openTraining');
+    if(openBtn){
+      openBtn.onclick = () => openTrainingView(activeDate);
+    }
+  }
+
+  function renderParticipantsPage(){
+    const nome = state.user?.nome || 'User';
+    const ps = state.participants;
+
+    return `
+      <div class="hero">
+        <div class="l1">CIAO, ${escapeHtml(nome).toUpperCase()}!</div>
+        <div class="l2">BENVENUTO NEL TUO CLUB DI PALLAVOLO!</div>
+      </div>
+
+      <div class="card">
+        <div style="font-size:18px;font-weight:900;color:var(--accent);margin-bottom:12px">
+          PARTECIPANTI ISCRITTI
+        </div>
+
+        <div class="list">
+          ${ps.length===0
+            ? `<div class="muted">Nessun partecipante registrato.</div>`
+            : ps.map(p => `
+              <div class="pRow">
+                <div style="flex:1">
+                  <div style="font-weight:800">${escapeHtml(p.nome)} ${escapeHtml(p.cognome)}</div>
+                  <div class="small muted">Genere: ${escapeHtml(p.genere)} • Età: ${escapeHtml(p.eta)} • Livello: ${escapeHtml(p.livello)}/5</div>
+                </div>
+                <button class="btn danger" data-del="${p.id}" style="padding:8px 10px">Elimina</button>
+              </div>
+            `).join('')
+          }
+        </div>
+
+        <div class="divider"></div>
+
+        <div style="font-size:16px;font-weight:900;margin-bottom:8px">Aggiungi partecipante</div>
+
+        <div class="grid2" style="margin-bottom:8px">
+          <input id="pNome" placeholder="Nome" value="${escapeHtml(state.participantForm.nome)}" />
+          <input id="pCognome" placeholder="Cognome" value="${escapeHtml(state.participantForm.cognome)}" />
+        </div>
+
+        <div class="grid2" style="margin-bottom:8px">
+          <input id="pGenere" placeholder="Genere (M/F/Altro)" value="${escapeHtml(state.participantForm.genere)}" />
+          <input id="pEta" placeholder="Età" value="${escapeHtml(state.participantForm.eta)}" />
+        </div>
+
+        <div class="grid2" style="margin-bottom:8px">
+          <input id="pLivello" placeholder="Livello (0-5)" value="${escapeHtml(state.participantForm.livello)}" />
+          <div></div>
+        </div>
+
+        <button class="btn" id="addParticipantBtn">Aggiungi</button>
+        <div class="small muted" style="margin-top:6px">
+          Livello 0 = principiante assoluto • 5 = giocatore esperto/pro
+        </div>
+      </div>
+    `;
+  }
+
+  function bindParticipants(){
+    appEl.querySelectorAll('[data-del]').forEach(el => {
+      el.onclick = () => removeParticipant(el.getAttribute('data-del'));
+    });
+
+    $('#pNome').oninput = (e) => state.participantForm.nome = e.target.value;
+    $('#pCognome').oninput = (e) => state.participantForm.cognome = e.target.value;
+    $('#pGenere').oninput = (e) => state.participantForm.genere = e.target.value;
+    $('#pEta').oninput = (e) => state.participantForm.eta = e.target.value;
+    $('#pLivello').oninput = (e) => state.participantForm.livello = e.target.value;
+
+    $('#addParticipantBtn').onclick = addParticipant;
+  }
+
+  // boot
+  render();
+</script>
+</body>
+</html>
