@@ -469,6 +469,19 @@ function handleLogout(){
    Participants
    ===================== */
 
+function getActiveDateStr(){
+  const today = ymd(new Date());
+  return state.selectedDate || today;
+}
+
+function getPresentParticipantsForDate(dateStr){
+  const cfg = state.trainingData?.[dateStr];
+  const avail = cfg?.availability || {};
+  // only those who explicitly said "yes"
+  return state.participants.filter(p => avail[p.id] === 'yes');
+}
+
+
 function addParticipant(){
   const f = state.participantForm;
   if(!f.nome.trim() || !f.cognome.trim() || !f.genere.trim() || !f.eta.trim() || !f.livello.trim()){
@@ -1087,31 +1100,38 @@ function bindCalendar(activeDate){
 
 function renderParticipantsPage(){
   const nome = state.user?.nome || 'User';
-  const ps = state.participants;
+  const dateStr = getActiveDateStr();
+  const training = isTrainingDay(dateStr);
+
+  const psPresent = getPresentParticipantsForDate(dateStr);
 
   return `
     <div class="hero">
       <div class="l1">CIAO, ${escapeHtml(nome).toUpperCase()}!</div>
-      <div class="l2">BENVENUTO NEL TUO CLUB DI PALLAVOLO!</div>
+      <div class="l2">PARTECIPANTI PRESENTI (PER SQUADRE)</div>
     </div>
 
     <div class="card">
-      <div style="font-size:18px;font-weight:900;color:var(--accent);margin-bottom:12px">
-        PARTECIPANTI ISCRITTI
+      <div style="font-size:18px;font-weight:900;color:var(--accent);margin-bottom:6px">
+        PRESENTI PER: ${escapeHtml(formatFullItalianDate(dateStr))}
+      </div>
+
+      <div class="small muted" style="margin-bottom:12px">
+        Mostro solo chi ha selezionato <b>✅ Presente</b> nell’allenamento di quel giorno.
+        ${training ? '' : '<br><b>Nota:</b> questo giorno non è un giorno allenamento, quindi la lista sarà quasi sempre vuota.'}
       </div>
 
       <div class="list">
-        ${ps.length===0
-          ? `<div class="muted">Nessun partecipante registrato.</div>`
-          : ps.map(p => `
-            <div class="pRow">
-              <div style="flex:1">
-                <div style="font-weight:800">${escapeHtml(p.nome)} ${escapeHtml(p.cognome)}</div>
-                <div class="small muted">Genere: ${escapeHtml(p.genere)} • Età: ${escapeHtml(p.eta)} • Livello: ${escapeHtml(p.livello)}/5</div>
+        ${psPresent.length===0
+          ? `<div class="muted">Nessuno ha confermato la presenza (✅) per questo giorno.</div>`
+          : psPresent.map(p => `
+              <div class="pRow">
+                <div style="flex:1">
+                  <div style="font-weight:800">${escapeHtml(p.nome)} ${escapeHtml(p.cognome)}</div>
+                  <div class="small muted">Genere: ${escapeHtml(p.genere)} • Età: ${escapeHtml(p.eta)} • Livello: ${escapeHtml(p.livello)}/5</div>
+                </div>
               </div>
-              <button class="btn danger" data-del="${p.id}" style="padding:8px 10px">Elimina</button>
-            </div>
-          `).join('')
+            `).join('')
         }
       </div>
 
@@ -1141,6 +1161,7 @@ function renderParticipantsPage(){
     </div>
   `;
 }
+
 
 function bindParticipants(){
   appEl.querySelectorAll('[data-del]').forEach(el => {
