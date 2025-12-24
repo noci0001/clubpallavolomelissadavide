@@ -20,5 +20,9 @@
   "homepage": "https://github.com/noci0001/MyBlog#readme",
   "devDependencies": {
     "@11ty/eleventy": "^2.0.1"
+  },
+    "dependencies": {
+    "@netlify/blobs": "^8.0.0",
+    "web-push": "^3.6.0"
   }
 }
