@@ -1,7 +1,7 @@
 import webpush from "web-push";
 import { getStore } from "@netlify/blobs";
 
-const VAPID_SUBJECT = "mailto:you@example.com";
+const VAPID_SUBJECT = "mailto:samuelnocita@gmail.com";
 
 export default async (req) => {
   // you can restrict this endpoint with a secret token

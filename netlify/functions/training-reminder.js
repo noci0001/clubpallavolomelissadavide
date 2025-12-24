@@ -1,7 +1,7 @@
 import webpush from "web-push";
 import { getStore } from "@netlify/blobs";
 
-const VAPID_SUBJECT = "mailto:you@example.com";
+const VAPID_SUBJECT = "mailto:samuelnocita@gmail.com";
 
 export const config = {
   schedule: "30 15 * * 2,4,6" // 15:30 Tue(2), Thu(4), Sat(6) UTC
