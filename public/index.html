@@ -361,30 +361,51 @@ function persist(){
    ===================== */
 
 async function handleToggleNotifications(){
+async function handleToggleNotifications(){
+  // Se il browser non supporta notifiche
+  if(!("Notification" in window)){
+    alert("Questo browser non supporta le notifiche.");
+    return;
+  }
+
+  // Se l’utente le ha bloccate: niente popup, devi cambiare dalle impostazioni del sito
+  if(Notification.permission === "denied"){
+    alert(
+      "Hai bloccato le notifiche per questo sito.\n\n" +
+      "Sbloccale dalle impostazioni del browser:\n" +
+      "- iPhone: Impostazioni > Safari > Dati siti web (cancella il sito) oppure AA > Impostazioni sito web\n" +
+      "- Chrome: lucchetto vicino all’URL > Notifiche > Consenti"
+    );
+    state.notificationsEnabled = false;
+    persist();
+    render();
+    return;
+  }
+
   if(!state.notificationsEnabled){
     try{
-      const sub = await subscribeToPush();
+      const sub = await subscribeToPush();       // qui dentro fa requestPermission()
       await sendSubscriptionToBackend(sub);
 
       state.notificationsEnabled = true;
       persist();
       render();
 
-      alert("Notifiche abilitate ✅ (serve che l'app sia installata su iOS)");
+      alert("Notifiche abilitate ✅");
     }catch(e){
-      alert("Non riesco ad abilitare le notifiche: " + (e?.message || e));
-      // keep toggle visually consistent
       state.notificationsEnabled = false;
       persist();
       render();
+      alert("Non riesco ad abilitare le notifiche: " + (e?.message || e));
     }
   }else{
-    // Optional: call an unsubscribe endpoint too
     state.notificationsEnabled = false;
     persist();
     render();
     alert("Notifiche disabilitate.");
   }
+}
+
 }
 
 /* =====================
