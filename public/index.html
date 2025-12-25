@@ -59,7 +59,6 @@
       background:var(--accent);
     }
     .btn.secondary{background:var(--blue); color:#fff}
-    .btn.danger{background:var(--red); color:#fff}
     .btn.ghost{
       background:transparent;
       color:var(--muted);
@@ -88,9 +87,6 @@
       color:var(--text);
       outline:none;
     }
-    label{font-size:12px;color:var(--muted)}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
     .divider{height:1px;background:var(--border);margin:10px 0}
     .calendarWrap{padding:12px}
     .calHeader{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -124,24 +120,16 @@
     .infoTitle{font-weight:800;text-transform:uppercase;color:var(--accent)}
     .infoDate{font-size:20px;font-weight:700;text-transform:lowercase;margin:6px 0 12px}
     .sectionTitle{font-weight:800;margin-bottom:4px}
-    .chipRow{display:flex;gap:6px;flex-wrap:wrap}
-    .chip{
-      border:1px solid var(--disabled);
+    .pill{
       border-radius:999px;
-      padding:2px 8px;
-      font-size:11px;
-      color:#d1d5db;
-      cursor:pointer;
-      user-select:none;
+      padding:3px 10px;
+      font-size:12px;
+      font-weight:800;
+      display:inline-block;
     }
-    .chip.yes.sel{background:var(--green); border-color:var(--green); color:#000; font-weight:800}
-    .chip.no.sel{background:var(--red); border-color:var(--red); color:#000; font-weight:800}
-    .chip.maybe.sel{background:var(--yellow); border-color:var(--yellow); color:#000; font-weight:800}
-    .list{max-height:260px;overflow:auto}
-    .pRow{
-      display:flex;gap:8px;align-items:center;
-      padding:8px 0;border-bottom:1px solid var(--border);
-    }
+    .pill.green{background:var(--green); color:#000}
+    .pill.red{background:var(--red); color:#000}
+    .pill.yellow{background:var(--yellow); color:#000}
     .overlay{
       position:fixed; inset:0;
       background:rgba(0,0,0,.6);
@@ -153,30 +141,13 @@
     .overlay.open{display:flex}
     .modal{
       width:min(920px, 96vw);
-      height:min(720px, 88vh);
+      height:min(520px, 88vh);
       background:var(--bg);
       border:1px solid var(--border);
       border-radius:16px;
       padding:16px;
       overflow:auto;
     }
-    .teamChip{
-      border:1px solid var(--border);
-      border-radius:999px;
-      padding:4px 10px;
-      display:flex;gap:6px;align-items:center;
-    }
-    .xBtn{cursor:pointer;color:inherit;opacity:.85}
-    .pill{
-      border-radius:999px;
-      padding:3px 10px;
-      font-size:12px;
-      font-weight:800;
-      display:inline-block;
-    }
-    .pill.green{background:var(--green); color:#000}
-    .pill.red{background:var(--red); color:#000}
-    .pill.yellow{background:var(--yellow); color:#000}
   </style>
 </head>
 <body>
@@ -227,7 +198,6 @@ async function subscribeToPush() {
 }
 
 async function sendSubscriptionToBackend(subscription) {
-  // store the subscription in Netlify Function
   const res = await fetch("/.netlify/functions/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -240,7 +210,6 @@ async function sendSubscriptionToBackend(subscription) {
    Constants & Helpers
    ===================== */
 
-const STORAGE_PARTICIPANTS = 'volleyclub_participants';
 const STORAGE_TRAINING_DATA = 'volleyclub_training_data';
 const STORAGE_USER = 'volleyclub_user';
 const STORAGE_NOTIF_ENABLED = 'volleyclub_notif_enabled';
@@ -254,8 +223,6 @@ const TRAINING_SLOTS = {
   4: [{start:18.0,end:19.5},{start:19.5,end:21.0},{start:21.0,end:22.5}],
   6: [{start:9.5,end:11.0},{start:11.0,end:12.5}],
 };
-const MAX_PER_SLOT = 8;
-const TEAM_COLORS = ['#22c55e','#3b82f6','#eab308','#ec4899','#a855f7','#f97316'];
 
 const IT = {
   monthNames: ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'],
@@ -267,9 +234,6 @@ const $ = (sel) => document.querySelector(sel);
 const appEl = $('#app');
 const overlayEl = $('#overlay');
 const modalEl = $('#modal');
-
-function uid(){ return String(Date.now()) + '_' + Math.random().toString(16).slice(2); }
-function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
 
 function loadJSON(key, fallback){
   try{
@@ -288,7 +252,6 @@ function ymd(d){
   return `${yyyy}-${mm}-${dd}`;
 }
 function parseYMD(s){
-  // force local date to avoid timezone shifts
   const [y,m,d] = s.split('-').map(Number);
   return new Date(y, m-1, d);
 }
@@ -321,6 +284,14 @@ function formatFullItalianDate(dateStr){
   const year = d.getFullYear();
   return `${weekday} ${day} ${month} ${year}`;
 }
+function escapeHtml(s){
+  return String(s ?? '')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'","&#039;");
+}
 
 /* =====================
    App State
@@ -330,28 +301,17 @@ let state = {
   user: loadJSON(STORAGE_USER, null),
   authMode: 'login',
   authError: null,
-  authForm: {
-    nome: '',
-    code: '',
-    birthYear: ''
-  },
+  authForm: { nome: '', code: '', birthYear: '' },
 
   notificationsEnabled: (localStorage.getItem(STORAGE_NOTIF_ENABLED) === 'true'),
 
-  activePage: 'calendar',
   selectedDate: null,
-
-  participants: loadJSON(STORAGE_PARTICIPANTS, []),
-  participantForm: { nome:'', cognome:'', genere:'', eta:'', livello:'' },
-
   trainingData: loadJSON(STORAGE_TRAINING_DATA, {}),
 
   trainingDate: null,
-  newTeamName: '',
 };
 
 function persist(){
-  saveJSON(STORAGE_PARTICIPANTS, state.participants);
   saveJSON(STORAGE_TRAINING_DATA, state.trainingData);
   if(state.user) saveJSON(STORAGE_USER, state.user);
   localStorage.setItem(STORAGE_NOTIF_ENABLED, state.notificationsEnabled ? 'true' : 'false');
@@ -374,13 +334,11 @@ async function handleToggleNotifications(){
       alert("Notifiche abilitate ✅ (serve che l'app sia installata su iOS)");
     }catch(e){
       alert("Non riesco ad abilitare le notifiche: " + (e?.message || e));
-      // keep toggle visually consistent
       state.notificationsEnabled = false;
       persist();
       render();
     }
   }else{
-    // Optional: call an unsubscribe endpoint too
     state.notificationsEnabled = false;
     persist();
     render();
@@ -391,6 +349,7 @@ async function handleToggleNotifications(){
 /* =====================
    Auth
    ===================== */
+
 async function apiLoginMember(nome, code){
   const res = await fetch("/.netlify/functions/login_member", {
     method: "POST",
@@ -445,7 +404,6 @@ async function handleSignup(){
   }
 }
 
-
 async function handleLogin(){
   state.authError = null;
   const f = state.authForm;
@@ -470,7 +428,6 @@ async function handleLogin(){
   }
 }
 
-
 function handleLogout(){
   localStorage.removeItem(STORAGE_USER);
   state.user = null;
@@ -483,68 +440,13 @@ function handleLogout(){
 }
 
 /* =====================
-   Participants
-   ===================== */
-
-function getActiveDateStr(){
-  const today = ymd(new Date());
-  return state.selectedDate || today;
-}
-
-function getPresentParticipantsForDate(dateStr){
-  const cfg = state.trainingData?.[dateStr];
-  const avail = cfg?.availability || {};
-  // only those who explicitly said "yes"
-  return state.participants.filter(p => avail[p.id] === 'yes');
-}
-
-
-function addParticipant(){
-  const f = state.participantForm;
-  if(!f.nome.trim() || !f.cognome.trim() || !f.genere.trim() || !f.eta.trim() || !f.livello.trim()){
-    return;
-  }
-  const lvl = Number(f.livello);
-  if(Number.isNaN(lvl) || lvl < 0 || lvl > 5) return;
-
-  const p = { id: uid(), nome:f.nome.trim(), cognome:f.cognome.trim(), genere:f.genere.trim(), eta:f.eta.trim(), livello:String(lvl) };
-  state.participants = [...state.participants, p];
-  state.participantForm = { nome:'', cognome:'', genere:'', eta:'', livello:'' };
-  persist();
-  render();
-}
-
-function removeParticipant(id){
-  state.participants = state.participants.filter(p => p.id !== id);
-
-  // remove from trainingData maps
-  const td = {...state.trainingData};
-  for(const dateKey of Object.keys(td)){
-    const cfg = td[dateKey];
-    if(cfg.assignments && cfg.assignments[id] !== undefined) delete cfg.assignments[id];
-    if(cfg.availability && cfg.availability[id] !== undefined) delete cfg.availability[id];
-    if(cfg.slotAssignments && cfg.slotAssignments[id] !== undefined) delete cfg.slotAssignments[id];
-    td[dateKey] = cfg;
-  }
-  state.trainingData = td;
-  persist();
-  render();
-}
-
-/* =====================
-   Training view
+   Training (solo tua presenza)
    ===================== */
 
 function ensureTrainingConfig(dateStr){
   const td = {...state.trainingData};
   if(!td[dateStr]){
-    td[dateStr] = {
-      teams: ['Squadra A','Squadra B'],
-      assignments: {},
-      availability: {},
-      myAvailability: null,
-      slotAssignments: {}
-    };
+    td[dateStr] = { myAvailability: null };
   }
   state.trainingData = td;
   persist();
@@ -559,103 +461,15 @@ function openTrainingView(dateStr){
 
 function updateTrainingConfig(dateStr, updater){
   const td = {...state.trainingData};
-  td[dateStr] = updater(td[dateStr]);
+  td[dateStr] = updater(td[dateStr] || { myAvailability: null });
   state.trainingData = td;
   persist();
 }
 
-function cycleTeam(dateStr, participantId){
-  const cfg = state.trainingData[dateStr];
-  const teams = cfg.teams || [];
-  if(!teams.length) return;
-
-  const current = (cfg.assignments && cfg.assignments[participantId]) ?? null;
-  let next = null;
-  if(current === null) next = teams[0];
-  else{
-    const idx = teams.indexOf(current);
-    if(idx === -1 || idx === teams.length - 1) next = null;
-    else next = teams[idx + 1];
-  }
-
-  updateTrainingConfig(dateStr, (c) => ({
-    ...c,
-    assignments: { ...(c.assignments||{}), [participantId]: next }
-  }));
+function setMyAvailability(dateStr, status){
+  updateTrainingConfig(dateStr, (c) => ({ ...c, myAvailability: status }));
   renderOverlay();
-}
-
-function setAvailability(dateStr, participantId, status){
-  updateTrainingConfig(dateStr, (c) => ({
-    ...c,
-    availability: { ...(c.availability||{}), [participantId]: status }
-  }));
-  renderOverlay();
-}
-
-function countAssignedInSlot(dateStr, slotIndex){
-  const cfg = state.trainingData[dateStr];
-  const map = cfg.slotAssignments || {};
-  let c = 0;
-  for(const pid of Object.keys(map)){
-    if(map[pid] === slotIndex) c++;
-  }
-  return c;
-}
-
-function cycleSlot(dateStr, participantId){
-  const cfg = state.trainingData[dateStr];
-  const slots = getSlotsForDate(dateStr);
-  const slotCount = slots.length;
-  if(!slotCount) return;
-
-  const current = (cfg.slotAssignments && cfg.slotAssignments[participantId] !== undefined)
-    ? cfg.slotAssignments[participantId]
-    : null;
-
-  let next = null;
-  if(current === null) next = 0;
-  else if(current >= 0 && current < slotCount - 1) next = current + 1;
-  else next = null;
-
-  if(next !== null){
-    const already = countAssignedInSlot(dateStr, next);
-    if(already >= MAX_PER_SLOT){
-      alert(`Turno pieno: questo turno ha già ${MAX_PER_SLOT} persone.`);
-      return;
-    }
-  }
-
-  updateTrainingConfig(dateStr, (c) => ({
-    ...c,
-    slotAssignments: { ...(c.slotAssignments||{}), [participantId]: next }
-  }));
-  renderOverlay();
-}
-
-function addTeam(dateStr){
-  const name = state.newTeamName.trim();
-  if(!name) return;
-  updateTrainingConfig(dateStr, (c) => {
-    if((c.teams||[]).includes(name)) return c;
-    return { ...c, teams: [...(c.teams||[]), name] };
-  });
-  state.newTeamName = '';
-  renderOverlay();
-}
-
-function removeTeam(dateStr, teamId){
-  updateTrainingConfig(dateStr, (c) => {
-    const newTeams = (c.teams||[]).filter(t => t !== teamId);
-    if(!newTeams.length) return c;
-
-    const newAssignments = {...(c.assignments||{})};
-    for(const pid of Object.keys(newAssignments)){
-      if(newAssignments[pid] === teamId) newAssignments[pid] = null;
-    }
-    return { ...c, teams: newTeams, assignments: newAssignments };
-  });
-  renderOverlay();
+  render();
 }
 
 /* =====================
@@ -694,7 +508,6 @@ function buildMonthCells(year, monthIndex){
 function closeOverlay(){
   overlayEl.classList.remove('open');
   state.trainingDate = null;
-  state.newTeamName = '';
 }
 
 overlayEl.addEventListener('click', (e) => {
@@ -704,19 +517,14 @@ overlayEl.addEventListener('click', (e) => {
 function renderOverlay(){
   if(!state.trainingDate) return;
   const dateStr = state.trainingDate;
-  const cfg = state.trainingData[dateStr];
+  const cfg = state.trainingData[dateStr] || {};
+  const my = cfg.myAvailability ?? null;
 
-  const slots = getSlotsForDate(dateStr);
-
-  // summary availability
-  const avail = cfg.availability || {};
-  let yes=0,no=0,unk=0;
-  for(const p of state.participants){
-    const s = avail[p.id];
-    if(s === 'yes') yes++;
-    else if(s === 'no') no++;
-    else unk++;
-  }
+  let pill = '';
+  if(my==='yes'){ pill = `<span class="pill green">✅ Presente</span>`; }
+  else if(my==='no'){ pill = `<span class="pill red">❌ Assente</span>`; }
+  else if(my==='maybe'){ pill = `<span class="pill yellow">❓ Forse</span>`; }
+  else pill = `<span class="muted">non specificata</span>`;
 
   modalEl.innerHTML = `
     <div class="row between">
@@ -729,126 +537,31 @@ function renderOverlay(){
 
     <div class="divider"></div>
 
-    <div style="margin-bottom:6px">
-      <div style="font-weight:800">Squadre</div>
-      <div class="small muted">Puoi creare più squadre per gestire diversi campi o partite.</div>
+    <div style="font-weight:800;margin-bottom:6px">La tua presenza</div>
+    <div class="row" style="flex-wrap:wrap">
+      <button class="btn" style="background:var(--green)" id="meYes">✅ Presente</button>
+      <button class="btn" style="background:var(--red);color:#fff" id="meNo">❌ Assente</button>
+      <button class="btn" style="background:var(--yellow)" id="meMaybe">❓ Forse</button>
     </div>
 
-    <div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:10px">
-      ${(cfg.teams||[]).map((t,idx) => {
-        const color = TEAM_COLORS[idx % TEAM_COLORS.length] || '#22c55e';
-        const canDel = (cfg.teams||[]).length > 1;
-        return `
-          <div class="teamChip" style="border-color:${color}">
-            <span style="color:${color};font-weight:800;font-size:12px">${t}</span>
-            ${canDel ? `<span class="xBtn" data-delteam="${t}" style="color:${color}">×</span>` : ``}
-          </div>
-        `;
-      }).join('')}
-    </div>
-
-    <div class="row" style="gap:8px;margin-bottom:10px">
-      <input id="newTeamName" placeholder="Nome nuova squadra (es. Squadra C)" value="${escapeHtml(state.newTeamName)}" />
-      <button class="btn" id="addTeamBtn">Aggiungi</button>
-    </div>
-
-    <div class="small muted" style="margin-bottom:10px">
-      Presenze: ✅ ${yes} • ❌ ${no} • ❓ ${unk}
-    </div>
-
-    <div class="divider"></div>
-
-    <div>
-      ${(state.participants.length === 0)
-        ? `<div class="muted">Nessun partecipante registrato.</div>`
-        : state.participants.map((p) => {
-            const team = (cfg.assignments && cfg.assignments[p.id]) ?? null;
-            const slotIdx = (cfg.slotAssignments && cfg.slotAssignments[p.id] !== undefined) ? cfg.slotAssignments[p.id] : null;
-            const slotLabel = slotIdx === null ? 'Nessun turno' : `Turno ${slotIdx+1}`;
-            const slotColor = slotIdx === null ? 'var(--disabled)' : 'var(--green)';
-
-            let teamLabel = 'Nessuna squadra';
-            let teamColor = 'var(--disabled)';
-            if(team){
-              const idx = (cfg.teams||[]).indexOf(team);
-              const c = idx >= 0 ? TEAM_COLORS[idx % TEAM_COLORS.length] : '#22c55e';
-              teamLabel = team;
-              teamColor = c;
-            }
-            const as = (cfg.availability && cfg.availability[p.id]) ?? null;
-
-            const slotLine = (slotIdx !== null && slots[slotIdx])
-              ? `<div class="small muted" style="text-align:right">${formatSlotLabel(slots[slotIdx])}</div>`
-              : '';
-
-            return `
-              <div class="pRow">
-                <div style="flex:1">
-                  <div style="font-weight:800">${escapeHtml(p.nome)} ${escapeHtml(p.cognome)}</div>
-                  <div class="small muted">Genere: ${escapeHtml(p.genere)} • Età: ${escapeHtml(p.eta)} • Livello: ${escapeHtml(p.livello)}/5</div>
-
-                  <div class="chipRow" style="margin-top:6px">
-                    <span class="chip yes ${as==='yes'?'sel':''}" data-av="yes" data-pid="${p.id}">✅ Presente</span>
-                    <span class="chip no ${as==='no'?'sel':''}" data-av="no" data-pid="${p.id}">❌ Assente</span>
-                    <span class="chip maybe ${as==='maybe'?'sel':''}" data-av="maybe" data-pid="${p.id}">❓ Forse</span>
-                  </div>
-                </div>
-
-                <div style="min-width:160px;text-align:right">
-                  <div style="cursor:pointer;font-weight:800;font-size:12px;color:${teamColor}" data-cycleteam="${p.id}">
-                    ${escapeHtml(teamLabel)}
-                  </div>
-                  <div style="cursor:pointer;font-weight:800;font-size:12px;color:${slotColor};margin-top:4px" data-cycleslot="${p.id}">
-                    ${escapeHtml(slotLabel)}
-                  </div>
-                  ${slotLine}
-                </div>
-              </div>
-            `;
-        }).join('')
-      }
+    <div style="margin-top:10px" class="row">
+      <div class="muted">Stato attuale:</div>
+      <div>${pill}</div>
     </div>
 
     <div class="divider"></div>
 
     <div class="small muted">
-      Cap turni: max ${MAX_PER_SLOT} persone per turno.
+      Turni: ${getSlotsForDate(dateStr).map(formatSlotLabel).join(' / ')}
     </div>
   `;
 
   overlayEl.classList.add('open');
 
   $('#closeModal').onclick = () => closeOverlay();
-
-  $('#newTeamName').oninput = (e) => { state.newTeamName = e.target.value; };
-  $('#addTeamBtn').onclick = () => addTeam(dateStr);
-
-  // remove team
-  modalEl.querySelectorAll('[data-delteam]').forEach(el => {
-    el.onclick = () => removeTeam(dateStr, el.getAttribute('data-delteam'));
-  });
-
-  // availability
-  modalEl.querySelectorAll('[data-av]').forEach(el => {
-    el.onclick = () => setAvailability(dateStr, el.getAttribute('data-pid'), el.getAttribute('data-av'));
-  });
-
-  // cycle team / slot
-  modalEl.querySelectorAll('[data-cycleteam]').forEach(el => {
-    el.onclick = () => cycleTeam(dateStr, el.getAttribute('data-cycleteam'));
-  });
-  modalEl.querySelectorAll('[data-cycleslot]').forEach(el => {
-    el.onclick = () => cycleSlot(dateStr, el.getAttribute('data-cycleslot'));
-  });
-}
-
-function escapeHtml(s){
-  return String(s ?? '')
-    .replaceAll('&','&amp;')
-    .replaceAll('<','&lt;')
-    .replaceAll('>','&gt;')
-    .replaceAll('"','&quot;')
-    .replaceAll("'","&#039;");
+  $('#meYes').onclick = () => setMyAvailability(dateStr, 'yes');
+  $('#meNo').onclick = () => setMyAvailability(dateStr, 'no');
+  $('#meMaybe').onclick = () => setMyAvailability(dateStr, 'maybe');
 }
 
 /* =====================
@@ -868,24 +581,15 @@ function render(){
 
   appEl.innerHTML = `
     <div class="tabs">
-      <div class="tab ${state.activePage==='calendar'?'active':''}" data-tab="calendar">CALENDARIO</div>
-      <div class="tab ${state.activePage==='participants'?'active':''}" data-tab="participants">PARTECIPANTI</div>
+      <div class="tab active">CALENDARIO</div>
       <button class="btn ghost" id="logoutBtn">Logout</button>
     </div>
 
-    ${state.activePage==='calendar' ? renderCalendarPage(activeDate, isToday) : renderParticipantsPage()}
+    ${renderCalendarPage(activeDate, isToday)}
   `;
 
-  appEl.querySelectorAll('[data-tab]').forEach(el => {
-    el.onclick = () => { state.activePage = el.getAttribute('data-tab'); render(); };
-  });
   $('#logoutBtn').onclick = handleLogout;
-
-  if(state.activePage==='calendar'){
-    bindCalendar(activeDate);
-  }else{
-    bindParticipants();
-  }
+  bindCalendar(activeDate);
 }
 
 function renderAuth(){
@@ -947,8 +651,6 @@ function bindAuth(){
     else handleSignup();
   };
 }
-
-
 
 function renderCalendarPage(activeDate, isToday){
   const nome = state.user?.nome || 'User';
@@ -1025,7 +727,6 @@ function renderCalendarPage(activeDate, isToday){
           <div class="muted">La tua presenza:</div>
           <div>${pill}</div>
         </div>
-        ${training ? `<div class="small muted" style="margin-top:4px">Su web non ho lo swipe; usa i pulsanti dentro "Allenamento".</div>` : ``}
       </div>
 
       <div class="divider"></div>
@@ -1069,7 +770,6 @@ function renderMonthGrid(y,m,activeDate){
 function bindCalendar(activeDate){
   $('#todayBtn').onclick = () => { state.selectedDate = null; render(); };
   $('#mapsBtn').onclick = openMaps;
-
   $('#notifToggle').onchange = handleToggleNotifications;
 
   $('#prevMonth').onclick = () => {
@@ -1094,85 +794,6 @@ function bindCalendar(activeDate){
   if(openBtn){
     openBtn.onclick = () => openTrainingView(activeDate);
   }
-}
-
-function renderParticipantsPage(){
-  const nome = state.user?.nome || 'User';
-  const dateStr = getActiveDateStr();
-  const training = isTrainingDay(dateStr);
-
-  const psPresent = getPresentParticipantsForDate(dateStr);
-
-  return `
-    <div class="hero">
-      <div class="l1">CIAO, ${escapeHtml(nome).toUpperCase()}!</div>
-      <div class="l2">PARTECIPANTI PRESENTI (PER SQUADRE)</div>
-    </div>
-
-    <div class="card">
-      <div style="font-size:18px;font-weight:900;color:var(--accent);margin-bottom:6px">
-        PRESENTI PER: ${escapeHtml(formatFullItalianDate(dateStr))}
-      </div>
-
-      <div class="small muted" style="margin-bottom:12px">
-        Mostro solo chi ha selezionato <b>✅ Presente</b> nell’allenamento di quel giorno.
-        ${training ? '' : '<br><b>Nota:</b> questo giorno non è un giorno allenamento, quindi la lista sarà quasi sempre vuota.'}
-      </div>
-
-      <div class="list">
-        ${psPresent.length===0
-          ? `<div class="muted">Nessuno ha confermato la presenza (✅) per questo giorno.</div>`
-          : psPresent.map(p => `
-              <div class="pRow">
-                <div style="flex:1">
-                  <div style="font-weight:800">${escapeHtml(p.nome)} ${escapeHtml(p.cognome)}</div>
-                  <div class="small muted">Genere: ${escapeHtml(p.genere)} • Età: ${escapeHtml(p.eta)} • Livello: ${escapeHtml(p.livello)}/5</div>
-                </div>
-              </div>
-            `).join('')
-        }
-      </div>
-
-      <div class="divider"></div>
-
-      <div style="font-size:16px;font-weight:900;margin-bottom:8px">Aggiungi partecipante</div>
-
-      <div class="grid2" style="margin-bottom:8px">
-        <input id="pNome" placeholder="Nome" value="${escapeHtml(state.participantForm.nome)}" />
-        <input id="pCognome" placeholder="Cognome" value="${escapeHtml(state.participantForm.cognome)}" />
-      </div>
-
-      <div class="grid2" style="margin-bottom:8px">
-        <input id="pGenere" placeholder="Genere (M/F/Altro)" value="${escapeHtml(state.participantForm.genere)}" />
-        <input id="pEta" placeholder="Età" value="${escapeHtml(state.participantForm.eta)}" />
-      </div>
-
-      <div class="grid2" style="margin-bottom:8px">
-        <input id="pLivello" placeholder="Livello (0-5)" value="${escapeHtml(state.participantForm.livello)}" />
-        <div></div>
-      </div>
-
-      <button class="btn" id="addParticipantBtn">Aggiungi</button>
-      <div class="small muted" style="margin-top:6px">
-        Livello 0 = principiante assoluto • 5 = giocatore esperto/pro
-      </div>
-    </div>
-  `;
-}
-
-
-function bindParticipants(){
-  appEl.querySelectorAll('[data-del]').forEach(el => {
-    el.onclick = () => removeParticipant(el.getAttribute('data-del'));
-  });
-
-  $('#pNome').oninput = (e) => state.participantForm.nome = e.target.value;
-  $('#pCognome').oninput = (e) => state.participantForm.cognome = e.target.value;
-  $('#pGenere').oninput = (e) => state.participantForm.genere = e.target.value;
-  $('#pEta').oninput = (e) => state.participantForm.eta = e.target.value;
-  $('#pLivello').oninput = (e) => state.participantForm.livello = e.target.value;
-
-  $('#addParticipantBtn').onclick = addParticipant;
 }
 
 /* =====================
