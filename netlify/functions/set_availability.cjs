@@ -1,36 +1,57 @@
-// netlify/functions/set_availability.cjs
-const { cors, json, parseJson, err, supabase } = require("./_supabase.cjs");
+// netlify/functions/get_availability.cjs
+const { createClient } = require("@supabase/supabase-js");
+
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    },
+    body: JSON.stringify(body),
+  };
+}
 
 exports.handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") return cors();
-  if (event.httpMethod !== "POST") return err(405, "Use POST");
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+      },
+      body: "",
+    };
+  }
+
+  if (event.httpMethod !== "POST") {
+    return json(405, { error: "Method not allowed" });
+  }
 
   try {
-    const body = parseJson(event.body);
-    const member_id = body?.member_id;
-    const training_date = body?.training_date; // "YYYY-MM-DD"
-    const status = body?.status; // yes | no | maybe
+    const { member_id, training_date } = JSON.parse(event.body || "{}");
 
-    if (!member_id || !training_date || !status) {
-      return err(400, "Missing member_id, training_date, or status");
+    if (!member_id || !training_date) {
+      return json(400, { error: "Missing member_id or training_date" });
     }
-    if (!["yes", "no", "maybe"].includes(status)) {
-      return err(400, "Invalid status");
-    }
+
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
 
     const { data, error } = await supabase
-      .from("training_availability")
-      .upsert(
-        { member_id, training_date, status, updated_at: new Date().toISOString() },
-        { onConflict: "member_id,training_date" }
-      )
+      .from("responses")
       .select("status")
-      .single();
+      .eq("member_id", member_id)
+      .eq("training_date", training_date)
+      .maybeSingle();
 
-    if (error) return err(500, error.message);
+    if (error) throw error;
 
-    return json(200, { ok: true, status: data.status });
+    return json(200, { status: data?.status ?? null });
   } catch (e) {
-    return err(500, e?.message || "Server error");
+    return json(500, { error: e?.message || String(e) });
   }
 };

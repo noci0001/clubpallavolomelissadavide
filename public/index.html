@@ -30,7 +30,7 @@
       color:var(--text);
     }
     .app{max-width:960px;margin:0 auto;padding:16px}
-    .row{display:flex;gap:8px;align-items:center}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .between{justify-content:space-between}
     .tabs{display:flex;gap:8px;align-items:center;margin-bottom:8px}
     .tab{
@@ -203,9 +203,10 @@ async function sendSubscriptionToBackend(subscription) {
    Helpers
    ===================== */
 
-const STORAGE_USER = 'volleyclub_user';
-const STORAGE_NOTIF_ENABLED = 'volleyclub_notif_enabled';
+const STORAGE_USER = "volleyclub_user";
+const STORAGE_NOTIF_ENABLED = "volleyclub_notif_enabled";
 
+// JS: 0=Dom ... 6=Sab
 const TRAINING_WEEKDAYS = [1,2,3,4,6]; // Lun-Gio + Sab
 const TRAINING_SLOTS = {
   1: [{start:18.0,end:19.5},{start:19.5,end:21.0},{start:21.0,end:22.5}],
@@ -216,15 +217,15 @@ const TRAINING_SLOTS = {
 };
 
 const IT = {
-  monthNames: ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'],
-  dayNames: ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'],
-  dayNamesShort: ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'],
+  monthNames: ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"],
+  dayNames: ["Domenica","Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato"],
+  dayNamesShort: ["Dom","Lun","Mar","Mer","Gio","Ven","Sab"],
 };
 
 const $ = (sel) => document.querySelector(sel);
-const appEl = $('#app');
-const overlayEl = $('#overlay');
-const modalEl = $('#modal');
+const appEl = $("#app");
+const overlayEl = $("#overlay");
+const modalEl = $("#modal");
 
 function loadJSON(key, fallback){
   try{
@@ -238,12 +239,12 @@ function saveJSON(key, value){
 
 function ymd(d){
   const yyyy = d.getFullYear();
-  const mm = String(d.getMonth()+1).padStart(2,'0');
-  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
   return `${yyyy}-${mm}-${dd}`;
 }
 function parseYMD(s){
-  const [y,m,d] = s.split('-').map(Number);
+  const [y,m,d] = s.split("-").map(Number);
   return new Date(y, m-1, d);
 }
 function isTrainingDay(dateStr){
@@ -261,8 +262,8 @@ function getSlotsForDate(dateStr){
 function formatHourLabel(hourFloat){
   const h = Math.floor(hourFloat);
   const minutes = Math.round((hourFloat - h) * 60);
-  const mm = String(minutes).padStart(2,'0');
-  return `${String(h).padStart(2,'0')}:${mm}`;
+  const mm = String(minutes).padStart(2,"0");
+  return `${String(h).padStart(2,"0")}:${mm}`;
 }
 function formatSlotLabel(s){
   return `${formatHourLabel(s.start)}–${formatHourLabel(s.end)}`;
@@ -276,12 +277,45 @@ function formatFullItalianDate(dateStr){
   return `${weekday} ${day} ${month} ${year}`;
 }
 function escapeHtml(s){
-  return String(s ?? '')
-    .replaceAll('&','&amp;')
-    .replaceAll('<','&lt;')
-    .replaceAll('>','&gt;')
-    .replaceAll('"','&quot;')
+  return String(s ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
     .replaceAll("'","&#039;");
+}
+
+/* =====================
+   DB sync (availability)
+   ===================== */
+
+async function apiGetMyAvailability(training_date){
+  const res = await fetch("/.netlify/functions/get_availability", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      member_id: state.user.id,
+      training_date
+    })
+  });
+  const j = await res.json().catch(()=> ({}));
+  if(!res.ok) throw new Error(j.error || "get_availability failed");
+  return j.status ?? null; // 'yes' | 'no' | 'maybe' | null
+}
+
+async function apiSetMyAvailability(training_date, status){
+  const res = await fetch("/.netlify/functions/set_availability", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      member_id: state.user.id,
+      training_date,
+      status
+    })
+  });
+  const j = await res.json().catch(()=> ({}));
+  if(!res.ok) throw new Error(j.error || "set_availability failed");
+  return j.status ?? status;
 }
 
 /* =====================
@@ -290,61 +324,21 @@ function escapeHtml(s){
 
 let state = {
   user: loadJSON(STORAGE_USER, null),
-  authMode: 'login',
+  authMode: "login",
   authError: null,
-  authForm: { nome: '', code: '', birthYear: '' },
+  authForm: { nome: "", code: "", birthYear: "" },
 
-  notificationsEnabled: (localStorage.getItem(STORAGE_NOTIF_ENABLED) === 'true'),
+  notificationsEnabled: (localStorage.getItem(STORAGE_NOTIF_ENABLED) === "true"),
 
   selectedDate: null,
   trainingDate: null,
 
-  // cache UI (non source of truth)
-  myAvailabilityCache: {} // { "YYYY-MM-DD": "yes|no|maybe|null" }
+  myAvailabilityCache: {} // cache UI (not source of truth)
 };
 
 function persist(){
   if(state.user) saveJSON(STORAGE_USER, state.user);
-  localStorage.setItem(STORAGE_NOTIF_ENABLED, state.notificationsEnabled ? 'true' : 'false');
-}
-
-/* =====================
-   DB sync (availability) - CONSISTENT WITH YOUR FUNCTIONS
-   ===================== */
-
-/**
- * get_availability.cjs expects:
- *   GET /.netlify/functions/get_availability?user_id=...&date=YYYY-MM-DD
- */
-async function apiGetMyAvailability(dateStr){
-  const user = state.user;
-  if(!user?.id) return null;
-
-  const url = `/.netlify/functions/get_availability?user_id=${encodeURIComponent(user.id)}&date=${encodeURIComponent(dateStr)}`;
-  const res = await fetch(url, { method: "GET" });
-
-  const j = await res.json().catch(() => ({}));
-  if(!res.ok) throw new Error(j.error || "get_availability failed");
-  return j.status ?? null; // 'yes' | 'no' | 'maybe' | null
-}
-
-/**
- * set_availability.cjs expects:
- *   POST { user_id, date, status }
- */
-async function apiSetMyAvailability(dateStr, status){
-  const user = state.user;
-  if(!user?.id) throw new Error("User non valido");
-
-  const res = await fetch("/.netlify/functions/set_availability", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ user_id: user.id, date: dateStr, status })
-  });
-
-  const j = await res.json().catch(() => ({}));
-  if(!res.ok) throw new Error(j.error || "set_availability failed");
-  return true;
+  localStorage.setItem(STORAGE_NOTIF_ENABLED, state.notificationsEnabled ? "true" : "false");
 }
 
 /* =====================
@@ -463,12 +457,22 @@ function handleLogout(){
   localStorage.removeItem(STORAGE_USER);
   state.user = null;
   state.notificationsEnabled = false;
-  localStorage.setItem(STORAGE_NOTIF_ENABLED, 'false');
-  state.authForm = { nome:'', code:'', birthYear:'' };
-  state.authMode = 'login';
+  localStorage.setItem(STORAGE_NOTIF_ENABLED, "false");
+  state.authForm = { nome:"", code:"", birthYear:"" };
+  state.authMode = "login";
   state.myAvailabilityCache = {};
   closeOverlay();
   render();
+}
+
+/* =====================
+   Maps
+   ===================== */
+
+function openMaps(){
+  const query = encodeURIComponent("Palestra di Villaverla");
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${query}`;
+  window.open(url, "_blank");
 }
 
 /* =====================
@@ -476,18 +480,18 @@ function handleLogout(){
    ===================== */
 
 function closeOverlay(){
-  overlayEl.classList.remove('open');
+  overlayEl.classList.remove("open");
   state.trainingDate = null;
 }
 
-overlayEl.addEventListener('click', (e) => {
+overlayEl.addEventListener("click", (e) => {
   if(e.target === overlayEl) closeOverlay();
 });
 
 function pillForStatus(status){
-  if(status==='yes') return `<span class="pill green">✅ Presente</span>`;
-  if(status==='no') return `<span class="pill red">❌ Assente</span>`;
-  if(status==='maybe') return `<span class="pill yellow">❓ Forse</span>`;
+  if(status==="yes") return `<span class="pill green">✅ Presente</span>`;
+  if(status==="no") return `<span class="pill red">❌ Assente</span>`;
+  if(status==="maybe") return `<span class="pill yellow">❓ Forse</span>`;
   return `<span class="muted">non specificata</span>`;
 }
 
@@ -495,9 +499,8 @@ async function openTrainingView(dateStr){
   if(!isTrainingDay(dateStr)) return;
 
   state.trainingDate = dateStr;
-  overlayEl.classList.add('open');
+  overlayEl.classList.add("open");
 
-  // Loading UI
   modalEl.innerHTML = `
     <div class="row between">
       <div>
@@ -509,7 +512,7 @@ async function openTrainingView(dateStr){
     <div class="divider"></div>
     <div class="muted">Carico dal database...</div>
   `;
-  $('#closeModal').onclick = closeOverlay;
+  $("#closeModal").onclick = closeOverlay;
 
   try{
     const status = await apiGetMyAvailability(dateStr);
@@ -528,11 +531,11 @@ async function openTrainingView(dateStr){
       <div style="color:var(--red);font-size:13px">
         Errore caricando la presenza: ${escapeHtml(e?.message || String(e))}
       </div>
-      <div class="small muted" style="margin-top:10px">
+      <div class="small muted" style="margin-top:8px">
         Tip: apri DevTools → Network → guarda la chiamata a get_availability e lo status code.
       </div>
     `;
-    $('#closeModal').onclick = closeOverlay;
+    $("#closeModal").onclick = closeOverlay;
   }
 }
 
@@ -549,7 +552,7 @@ function renderOverlay(dateStr, status){
     <div class="divider"></div>
 
     <div style="font-weight:800;margin-bottom:6px">La tua presenza (sync DB)</div>
-    <div class="row" style="flex-wrap:wrap">
+    <div class="row">
       <button class="btn" style="background:var(--green)" id="meYes">✅ Presente</button>
       <button class="btn" style="background:var(--red);color:#fff" id="meNo">❌ Assente</button>
       <button class="btn" style="background:var(--yellow)" id="meMaybe">❓ Forse</button>
@@ -563,43 +566,33 @@ function renderOverlay(dateStr, status){
     <div class="divider"></div>
 
     <div class="small muted">
-      Turni: ${getSlotsForDate(dateStr).map(formatSlotLabel).join(' / ')}
+      Turni: ${getSlotsForDate(dateStr).map(formatSlotLabel).join(" / ")}
     </div>
   `;
 
-  $('#closeModal').onclick = closeOverlay;
+  $("#closeModal").onclick = closeOverlay;
 
   const set = async (newStatus) => {
-    $('#meYes').disabled = true;
-    $('#meNo').disabled = true;
-    $('#meMaybe').disabled = true;
+    $("#meYes").disabled = true;
+    $("#meNo").disabled = true;
+    $("#meMaybe").disabled = true;
 
     try{
       await apiSetMyAvailability(dateStr, newStatus);
       state.myAvailabilityCache[dateStr] = newStatus;
-      $('#statusPill').innerHTML = pillForStatus(newStatus);
+      $("#statusPill").innerHTML = pillForStatus(newStatus);
     }catch(e){
       alert("Errore salvataggio DB: " + (e?.message || e));
     }finally{
-      $('#meYes').disabled = false;
-      $('#meNo').disabled = false;
-      $('#meMaybe').disabled = false;
+      $("#meYes").disabled = false;
+      $("#meNo").disabled = false;
+      $("#meMaybe").disabled = false;
     }
   };
 
-  $('#meYes').onclick = () => set('yes');
-  $('#meNo').onclick = () => set('no');
-  $('#meMaybe').onclick = () => set('maybe');
-}
-
-/* =====================
-   Maps
-   ===================== */
-
-function openMaps(){
-  const query = encodeURIComponent('Palestra di Villaverla');
-  const url = `https://www.google.com/maps/dir/?api=1&destination=${query}`;
-  window.open(url, '_blank');
+  $("#meYes").onclick = () => set("yes");
+  $("#meNo").onclick = () => set("no");
+  $("#meMaybe").onclick = () => set("maybe");
 }
 
 /* =====================
@@ -632,18 +625,18 @@ function renderMonthGrid(y,m,activeDate){
     const match = isMatchDay(dateStr);
     const selected = dateStr === activeDate;
 
-    const icon = match ? '⭐' : (training ? '🏐' : '');
+    const icon = match ? "⭐" : (training ? "🏐" : "");
     return `
-      <div class="day ${selected?'selected':''}" data-day="${dateStr}">
+      <div class="day ${selected?"selected":""}" data-day="${dateStr}">
         <div class="dayNum">${dt.getDate()}</div>
         <div class="dayIcon">${icon}</div>
       </div>
     `;
-  }).join('');
+  }).join("");
 }
 
 function renderCalendarPage(activeDate){
-  const nome = state.user?.nome || 'User';
+  const nome = state.user?.nome || "User";
   const d = parseYMD(activeDate);
   if(!state._calYM){
     state._calYM = { y: d.getFullYear(), m: d.getMonth() };
@@ -668,8 +661,8 @@ function renderCalendarPage(activeDate){
       <div class="row" style="gap:10px">
         <div class="small">Promemoria allenamento</div>
         <label class="row" style="gap:8px;cursor:pointer;user-select:none">
-          <input type="checkbox" id="notifToggle" ${state.notificationsEnabled?'checked':''} />
-          <span class="muted small">${state.notificationsEnabled?'ON':'OFF'}</span>
+          <input type="checkbox" id="notifToggle" ${state.notificationsEnabled?"checked":""} />
+          <span class="muted small">${state.notificationsEnabled?"ON":"OFF"}</span>
         </label>
       </div>
     </div>
@@ -682,7 +675,7 @@ function renderCalendarPage(activeDate){
       </div>
 
       <div class="calGrid">
-        ${IT.dayNamesShort.slice(1).concat(IT.dayNamesShort[0]).map(n => `<div class="dow">${n}</div>`).join('')}
+        ${IT.dayNamesShort.slice(1).concat(IT.dayNamesShort[0]).map(n => `<div class="dow">${n}</div>`).join("")}
         ${renderMonthGrid(y,m,activeDate)}
       </div>
 
@@ -716,7 +709,7 @@ function render(){
     ${renderCalendarPage(activeDate)}
   `;
 
-  $('#logoutBtn').onclick = handleLogout;
+  $("#logoutBtn").onclick = handleLogout;
   bindCalendar(activeDate);
 }
 
@@ -729,81 +722,81 @@ function renderAuth(){
     <div class="card" style="padding:24px">
       <div style="font-size:28px;font-weight:900;margin-bottom:6px">Benvenut* nel Club di Pallavolo</div>
       <div class="muted small" style="margin-bottom:18px">
-        ${a==='login'
-          ? 'Accedi con Nome + Codice.'
-          : 'Registrati con Nome + Anno di nascita. Il codice viene generato automaticamente.'}
+        ${a==="login"
+          ? "Accedi con Nome + Codice."
+          : "Registrati con Nome + Anno di nascita. Il codice viene generato automaticamente."}
       </div>
 
       <div class="row" style="border:1px solid var(--border);border-radius:999px;overflow:hidden;margin-bottom:14px">
-        <div class="tab ${a==='login'?'active':''}" style="border:0" data-auth="login">LOGIN</div>
-        <div class="tab ${a==='signup'?'active':''}" style="border:0" data-auth="signup">REGISTRAZIONE</div>
+        <div class="tab ${a==="login"?"active":""}" style="border:0" data-auth="login">LOGIN</div>
+        <div class="tab ${a==="signup"?"active":""}" style="border:0" data-auth="signup">REGISTRAZIONE</div>
       </div>
 
       <div style="display:grid;gap:10px">
         <input id="nome" placeholder="Nome (es. Sam)" value="${escapeHtml(f.nome)}" />
 
-        ${a==='login' ? `
+        ${a==="login" ? `
           <input id="code" placeholder="Codice (es. SAM-2000)" value="${escapeHtml(f.code)}" />
         ` : `
           <input id="birthYear" placeholder="Anno di nascita (es. 2000)" value="${escapeHtml(f.birthYear)}" />
           <div class="small muted">Il codice sarà: PRIME 3 LETTERE + "-" + ANNO (es. SAM-2000)</div>
         `}
 
-        ${err ? `<div style="color:var(--red);font-size:12px">${escapeHtml(err)}</div>` : ''}
+        ${err ? `<div style="color:var(--red);font-size:12px">${escapeHtml(err)}</div>` : ""}
 
-        <button class="btn" id="authSubmit">${a==='login' ? 'Accedi' : 'Crea account'}</button>
+        <button class="btn" id="authSubmit">${a==="login" ? "Accedi" : "Crea account"}</button>
       </div>
     </div>
   `;
 }
 
 function bindAuth(){
-  appEl.querySelectorAll('[data-auth]').forEach(el => {
+  appEl.querySelectorAll("[data-auth]").forEach(el => {
     el.onclick = () => {
-      state.authMode = el.getAttribute('data-auth');
+      state.authMode = el.getAttribute("data-auth");
       state.authError = null;
       render();
     };
   });
 
-  $('#nome').oninput = (e) => state.authForm.nome = e.target.value;
+  $("#nome").oninput = (e) => state.authForm.nome = e.target.value;
 
-  if(state.authMode === 'login'){
-    $('#code').oninput = (e) => state.authForm.code = e.target.value;
+  if(state.authMode === "login"){
+    $("#code").oninput = (e) => state.authForm.code = e.target.value;
   }else{
-    $('#birthYear').oninput = (e) => state.authForm.birthYear = e.target.value;
+    $("#birthYear").oninput = (e) => state.authForm.birthYear = e.target.value;
   }
 
-  $('#authSubmit').onclick = () => {
-    if(state.authMode==='login') handleLogin();
+  $("#authSubmit").onclick = () => {
+    if(state.authMode==="login") handleLogin();
     else handleSignup();
   };
 }
 
 function bindCalendar(activeDate){
-  $('#todayBtn').onclick = () => { state.selectedDate = null; render(); };
-  $('#mapsBtn').onclick = openMaps;
-  $('#notifToggle').onchange = handleToggleNotifications;
+  $("#todayBtn").onclick = () => { state.selectedDate = null; render(); };
+  $("#mapsBtn").onclick = openMaps;
+  $("#notifToggle").onchange = handleToggleNotifications;
 
-  $('#prevMonth').onclick = () => {
+  $("#prevMonth").onclick = () => {
     state._calYM.m -= 1;
     if(state._calYM.m < 0){ state._calYM.m = 11; state._calYM.y -= 1; }
     render();
   };
-  $('#nextMonth').onclick = () => {
+  $("#nextMonth").onclick = () => {
     state._calYM.m += 1;
     if(state._calYM.m > 11){ state._calYM.m = 0; state._calYM.y += 1; }
     render();
   };
 
-  appEl.querySelectorAll('[data-day]').forEach(el => {
+  appEl.querySelectorAll("[data-day]").forEach(el => {
     el.onclick = () => {
-      state.selectedDate = el.getAttribute('data-day');
+      state.selectedDate = el.getAttribute("data-day");
       render();
     };
   });
 
-  const openBtn = $('#openTraining');
+  const openBtn = $("#openTraining");
   if(openBtn){
     openBtn.onclick = () => openTrainingView(activeDate);
   }
