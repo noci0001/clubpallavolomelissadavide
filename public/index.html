@@ -40,7 +40,6 @@
       padding:8px 10px;
       text-align:center;
       color:var(--muted);
-      cursor:pointer;
       user-select:none;
     }
     .tab.active{
@@ -117,9 +116,6 @@
     .day.selected{background:var(--accent); border-color:var(--accent); color:#000}
     .dayNum{font-size:14px}
     .dayIcon{font-size:14px;text-align:center;min-height:16px}
-    .infoTitle{font-weight:800;text-transform:uppercase;color:var(--accent)}
-    .infoDate{font-size:20px;font-weight:700;text-transform:lowercase;margin:6px 0 12px}
-    .sectionTitle{font-weight:800;margin-bottom:4px}
     .pill{
       border-radius:999px;
       padding:3px 10px;
@@ -162,10 +158,8 @@
    PWA + PUSH CONFIG
    ========================= */
 
-// Put your VAPID PUBLIC key here (one-line string)
 const VAPID_PUBLIC_KEY = "BCTipjxiFUlUNTKXHSv-3BBA60tDJ9k6TZVHmZAIxP6ZxXpn_YMNbCCFMdNd5-bYxzSRIJ8uWJm8UBIAIefGsnA";
 
-// Convert base64 public key to Uint8Array (required by subscribe)
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -182,7 +176,6 @@ async function registerServiceWorker() {
 
 async function subscribeToPush() {
   if (!("PushManager" in window)) throw new Error("Push non supportato su questo browser");
-
   const reg = await registerServiceWorker();
 
   const permission = await Notification.requestPermission();
@@ -207,14 +200,12 @@ async function sendSubscriptionToBackend(subscription) {
 }
 
 /* =====================
-   Constants & Helpers
+   Helpers
    ===================== */
 
-const STORAGE_TRAINING_DATA = 'volleyclub_training_data';
 const STORAGE_USER = 'volleyclub_user';
 const STORAGE_NOTIF_ENABLED = 'volleyclub_notif_enabled';
 
-// JS: 0=Dom ... 6=Sab
 const TRAINING_WEEKDAYS = [1,2,3,4,6]; // Lun-Gio + Sab
 const TRAINING_SLOTS = {
   1: [{start:18.0,end:19.5},{start:19.5,end:21.0},{start:21.0,end:22.5}],
@@ -294,6 +285,43 @@ function escapeHtml(s){
 }
 
 /* =====================
+   DB sync (availability) - Netlify Functions (Supabase)
+   ===================== */
+
+async function apiGetMyAvailability(training_date){
+  if(!state.user?.id) return null;
+
+  const res = await fetch("/.netlify/functions/get_availability", {
+    method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      member_id: state.user.id,
+      training_date
+    })
+  });
+  const j = await res.json().catch(()=> ({}));
+  if(!res.ok) throw new Error(j.error || "get_availability failed");
+  return j.status ?? null; // 'yes' | 'no' | 'maybe' | null
+}
+
+async function apiSetMyAvailability(training_date, status){
+  if(!state.user?.id) throw new Error("User non valido");
+
+  const res = await fetch("/.netlify/functions/set_availability", {
+    method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      member_id: state.user.id,
+      training_date,
+      status
+    })
+  });
+  const j = await res.json().catch(()=> ({}));
+  if(!res.ok) throw new Error(j.error || "set_availability failed");
+  return j.status ?? status;
+}
+
+/* =====================
    App State
    ===================== */
 
@@ -306,13 +334,14 @@ let state = {
   notificationsEnabled: (localStorage.getItem(STORAGE_NOTIF_ENABLED) === 'true'),
 
   selectedDate: null,
-  trainingData: loadJSON(STORAGE_TRAINING_DATA, {}),
-
   trainingDate: null,
+
+  // availability state (fetched from DB)
+  myAvailability: null,
+  loadingAvailability: false,
 };
 
 function persist(){
-  saveJSON(STORAGE_TRAINING_DATA, state.trainingData);
   if(state.user) saveJSON(STORAGE_USER, state.user);
   localStorage.setItem(STORAGE_NOTIF_ENABLED, state.notificationsEnabled ? 'true' : 'false');
 }
@@ -330,7 +359,6 @@ async function handleToggleNotifications(){
       state.notificationsEnabled = true;
       persist();
       render();
-
       alert("Notifiche abilitate ✅ (serve che l'app sia installata su iOS)");
     }catch(e){
       alert("Non riesco ad abilitare le notifiche: " + (e?.message || e));
@@ -394,7 +422,9 @@ async function handleSignup(){
 
   try{
     const user = await apiSignupMember(nome, y);
-    state.user = user; // {id, nome, member_code}
+    state.user = user;
+    state.myAvailability = null;
+    state.loadingAvailability = false;
     persist();
     render();
     alert(`Registrato! Il tuo codice è: ${user.member_code}`);
@@ -419,7 +449,9 @@ async function handleLogin(){
 
   try{
     const user = await apiLoginMember(nome, code);
-    state.user = user; // {id, nome, member_code}
+    state.user = user;
+    state.myAvailability = null;
+    state.loadingAvailability = false;
     persist();
     render();
   }catch(e){
@@ -435,41 +467,115 @@ function handleLogout(){
   localStorage.setItem(STORAGE_NOTIF_ENABLED, 'false');
   state.authForm = { nome:'', code:'', birthYear:'' };
   state.authMode = 'login';
+
+  state.myAvailability = null;
+  state.loadingAvailability = false;
+
   closeOverlay();
   render();
 }
 
 /* =====================
-   Training (solo tua presenza)
+   Training Overlay (DB synced)
    ===================== */
 
-function ensureTrainingConfig(dateStr){
-  const td = {...state.trainingData};
-  if(!td[dateStr]){
-    td[dateStr] = { myAvailability: null };
-  }
-  state.trainingData = td;
-  persist();
+function closeOverlay(){
+  overlayEl.classList.remove('open');
+  state.trainingDate = null;
+  state.myAvailability = null;
+  state.loadingAvailability = false;
 }
 
-function openTrainingView(dateStr){
+overlayEl.addEventListener('click', (e) => {
+  if(e.target === overlayEl) closeOverlay();
+});
+
+function pillForStatus(status){
+  if(status==='yes') return `<span class="pill green">✅ Presente</span>`;
+  if(status==='no') return `<span class="pill red">❌ Assente</span>`;
+  if(status==='maybe') return `<span class="pill yellow">❓ Forse</span>`;
+  return `<span class="muted">non specificata</span>`;
+}
+
+async function openTrainingView(dateStr){
   if(!isTrainingDay(dateStr)) return;
-  ensureTrainingConfig(dateStr);
+
   state.trainingDate = dateStr;
+  state.loadingAvailability = true;
+  state.myAvailability = null;
+
+  overlayEl.classList.add('open');
   renderOverlay();
+
+  try{
+    const status = await apiGetMyAvailability(dateStr);
+    state.myAvailability = status;
+  }catch(e){
+    alert("Errore caricando la presenza: " + (e?.message || e));
+    state.myAvailability = null;
+  }finally{
+    state.loadingAvailability = false;
+    renderOverlay();
+  }
 }
 
-function updateTrainingConfig(dateStr, updater){
-  const td = {...state.trainingData};
-  td[dateStr] = updater(td[dateStr] || { myAvailability: null });
-  state.trainingData = td;
-  persist();
+async function setMyAvailability(dateStr, status){
+  state.loadingAvailability = true;
+  renderOverlay();
+
+  try{
+    const saved = await apiSetMyAvailability(dateStr, status);
+    state.myAvailability = saved;
+  }catch(e){
+    alert("Errore salvataggio DB: " + (e?.message || e));
+  }finally{
+    state.loadingAvailability = false;
+    renderOverlay();
+  }
 }
 
-function setMyAvailability(dateStr, status){
-  updateTrainingConfig(dateStr, (c) => ({ ...c, myAvailability: status }));
-  renderOverlay();
-  render();
+function renderOverlay(){
+  if(!state.trainingDate) return;
+
+  const dateStr = state.trainingDate;
+  const my = state.myAvailability ?? null;
+  const loading = !!state.loadingAvailability;
+
+  modalEl.innerHTML = `
+    <div class="row between">
+      <div>
+        <div style="font-size:20px;font-weight:800;color:var(--accent)">Allenamento</div>
+        <div style="font-size:14px">${formatFullItalianDate(dateStr)}</div>
+      </div>
+      <button class="btn" id="closeModal">CHIUDI</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <div style="font-weight:800;margin-bottom:6px">La tua presenza (sync Supabase)</div>
+
+    <div class="row" style="flex-wrap:wrap">
+      <button class="btn" style="background:var(--green)" id="meYes" ${loading?'disabled':''}>✅ Presente</button>
+      <button class="btn" style="background:var(--red);color:#fff" id="meNo" ${loading?'disabled':''}>❌ Assente</button>
+      <button class="btn" style="background:var(--yellow)" id="meMaybe" ${loading?'disabled':''}>❓ Forse</button>
+    </div>
+
+    <div style="margin-top:10px" class="row">
+      <div class="muted">Stato attuale:</div>
+      <div>${loading ? `<span class="muted">caricamento...</span>` : pillForStatus(my)}</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="small muted">
+      Turni: ${getSlotsForDate(dateStr).map(formatSlotLabel).join(' / ')}
+    </div>
+  `;
+
+  $('#closeModal').onclick = () => closeOverlay();
+  $('#meYes').onclick = () => setMyAvailability(dateStr, 'yes');
+  $('#meNo').onclick = () => setMyAvailability(dateStr, 'no');
+  $('#meMaybe').onclick = () => setMyAvailability(dateStr, 'maybe');
 }
 
 /* =====================
@@ -483,7 +589,7 @@ function openMaps(){
 }
 
 /* =====================
-   Calendar helpers
+   Calendar UI
    ===================== */
 
 function buildMonthCells(year, monthIndex){
@@ -501,67 +607,76 @@ function buildMonthCells(year, monthIndex){
   return cells;
 }
 
-/* =====================
-   Overlay
-   ===================== */
+function renderMonthGrid(y,m,activeDate){
+  const cells = buildMonthCells(y,m);
+  return cells.map((dt) => {
+    if(!dt){
+      return `<div class="day disabled" style="visibility:hidden"></div>`;
+    }
+    const dateStr = ymd(dt);
+    const training = isTrainingDay(dateStr);
+    const match = isMatchDay(dateStr);
+    const selected = dateStr === activeDate;
 
-function closeOverlay(){
-  overlayEl.classList.remove('open');
-  state.trainingDate = null;
+    const icon = match ? '⭐' : (training ? '🏐' : '');
+    return `
+      <div class="day ${selected?'selected':''}" data-day="${dateStr}">
+        <div class="dayNum">${dt.getDate()}</div>
+        <div class="dayIcon">${icon}</div>
+      </div>
+    `;
+  }).join('');
 }
 
-overlayEl.addEventListener('click', (e) => {
-  if(e.target === overlayEl) closeOverlay();
-});
+function renderCalendarPage(activeDate){
+  const nome = state.user?.nome || 'User';
+  const d = parseYMD(activeDate);
+  if(!state._calYM){
+    state._calYM = { y: d.getFullYear(), m: d.getMonth() };
+  }
+  const {y, m} = state._calYM;
 
-function renderOverlay(){
-  if(!state.trainingDate) return;
-  const dateStr = state.trainingDate;
-  const cfg = state.trainingData[dateStr] || {};
-  const my = cfg.myAvailability ?? null;
+  const training = isTrainingDay(activeDate);
 
-  let pill = '';
-  if(my==='yes'){ pill = `<span class="pill green">✅ Presente</span>`; }
-  else if(my==='no'){ pill = `<span class="pill red">❌ Assente</span>`; }
-  else if(my==='maybe'){ pill = `<span class="pill yellow">❓ Forse</span>`; }
-  else pill = `<span class="muted">non specificata</span>`;
+  return `
+    <div class="hero">
+      <div class="l1">CIAO, ${escapeHtml(nome).toUpperCase()}!</div>
+      <div class="l2">BENVENUTO NEL TUO CLUB DI PALLAVOLO!</div>
+    </div>
 
-  modalEl.innerHTML = `
-    <div class="row between">
-      <div>
-        <div style="font-size:20px;font-weight:800;color:var(--accent)">Allenamento</div>
-        <div style="font-size:14px">${formatFullItalianDate(dateStr)}</div>
+    <div class="row between" style="margin-bottom:10px">
+      <div class="row">
+        <button class="btn" id="todayBtn">OGGI</button>
+        <button class="btn secondary" id="mapsBtn">NAVIGA VERSO</button>
+        ${training ? `<button class="btn" style="background:var(--green)" id="openTraining">APRI ALLENAMENTO</button>` : ``}
       </div>
-      <button class="btn" id="closeModal">SALVA E CHIUDI</button>
+
+      <div class="row" style="gap:10px">
+        <div class="small">Promemoria allenamento</div>
+        <label class="row" style="gap:8px;cursor:pointer;user-select:none">
+          <input type="checkbox" id="notifToggle" ${state.notificationsEnabled?'checked':''} />
+          <span class="muted small">${state.notificationsEnabled?'ON':'OFF'}</span>
+        </label>
+      </div>
     </div>
 
-    <div class="divider"></div>
+    <div class="card calendarWrap">
+      <div class="calHeader">
+        <button class="btn ghost" id="prevMonth">←</button>
+        <div class="title">${IT.monthNames[m]} ${y}</div>
+        <button class="btn ghost" id="nextMonth">→</button>
+      </div>
 
-    <div style="font-weight:800;margin-bottom:6px">La tua presenza</div>
-    <div class="row" style="flex-wrap:wrap">
-      <button class="btn" style="background:var(--green)" id="meYes">✅ Presente</button>
-      <button class="btn" style="background:var(--red);color:#fff" id="meNo">❌ Assente</button>
-      <button class="btn" style="background:var(--yellow)" id="meMaybe">❓ Forse</button>
-    </div>
+      <div class="calGrid">
+        ${IT.dayNamesShort.slice(1).concat(IT.dayNamesShort[0]).map(n => `<div class="dow">${n}</div>`).join('')}
+        ${renderMonthGrid(y,m,activeDate)}
+      </div>
 
-    <div style="margin-top:10px" class="row">
-      <div class="muted">Stato attuale:</div>
-      <div>${pill}</div>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="small muted">
-      Turni: ${getSlotsForDate(dateStr).map(formatSlotLabel).join(' / ')}
+      <div class="small muted" style="margin-top:8px">
+        🏐 = allenamento (Lun-Gio, Sab) • ⭐ = partita (Domenica)
+      </div>
     </div>
   `;
-
-  overlayEl.classList.add('open');
-
-  $('#closeModal').onclick = () => closeOverlay();
-  $('#meYes').onclick = () => setMyAvailability(dateStr, 'yes');
-  $('#meNo').onclick = () => setMyAvailability(dateStr, 'no');
-  $('#meMaybe').onclick = () => setMyAvailability(dateStr, 'maybe');
 }
 
 /* =====================
@@ -571,7 +686,6 @@ function renderOverlay(){
 function render(){
   const today = ymd(new Date());
   const activeDate = state.selectedDate || today;
-  const isToday = activeDate === today;
 
   if(!state.user){
     appEl.innerHTML = renderAuth();
@@ -585,7 +699,7 @@ function render(){
       <button class="btn ghost" id="logoutBtn">Logout</button>
     </div>
 
-    ${renderCalendarPage(activeDate, isToday)}
+    ${renderCalendarPage(activeDate)}
   `;
 
   $('#logoutBtn').onclick = handleLogout;
@@ -599,7 +713,7 @@ function renderAuth(){
 
   return `
     <div class="card" style="padding:24px">
-      <div style="font-size:28px;font-weight:900;margin-bottom:6px">Benvenuto nel Club di Pallavolo</div>
+      <div style="font-size:28px;font-weight:900;margin-bottom:6px">Benvenut* nel Club di Pallavolo</div>
       <div class="muted small" style="margin-bottom:18px">
         ${a==='login'
           ? 'Accedi con Nome + Codice.'
@@ -650,121 +764,6 @@ function bindAuth(){
     if(state.authMode==='login') handleLogin();
     else handleSignup();
   };
-}
-
-function renderCalendarPage(activeDate, isToday){
-  const nome = state.user?.nome || 'User';
-  const d = parseYMD(activeDate);
-  if(!state._calYM){
-    state._calYM = { y: d.getFullYear(), m: d.getMonth() };
-  }
-  const {y, m} = state._calYM;
-
-  const training = isTrainingDay(activeDate);
-  const match = isMatchDay(activeDate);
-
-  const cfg = state.trainingData[activeDate];
-  const my = cfg ? (cfg.myAvailability ?? null) : null;
-  let pill = '';
-  if(my==='yes'){ pill = `<span class="pill green">✅ Presente</span>`; }
-  else if(my==='no'){ pill = `<span class="pill red">❌ Assente</span>`; }
-  else if(my==='maybe'){ pill = `<span class="pill yellow">❓ Forse</span>`; }
-  else pill = `<span class="muted">non specificata</span>`;
-
-  return `
-    <div class="hero">
-      <div class="l1">CIAO, ${escapeHtml(nome).toUpperCase()}!</div>
-      <div class="l2">BENVENUTO NEL TUO CLUB DI PALLAVOLO!</div>
-    </div>
-
-    <div class="row between" style="margin-bottom:10px">
-      <div class="row">
-        <button class="btn" id="todayBtn">OGGI</button>
-        <button class="btn secondary" id="mapsBtn">NAVIGA VERSO</button>
-      </div>
-
-      <div class="row" style="gap:10px">
-        <div class="small">Promemoria allenamento</div>
-        <label class="row" style="gap:8px;cursor:pointer;user-select:none">
-          <input type="checkbox" id="notifToggle" ${state.notificationsEnabled?'checked':''} />
-          <span class="muted small">${state.notificationsEnabled?'ON':'OFF'}</span>
-        </label>
-      </div>
-    </div>
-
-    <div class="card calendarWrap">
-      <div class="calHeader">
-        <button class="btn ghost" id="prevMonth">←</button>
-        <div class="title">${IT.monthNames[m]} ${y}</div>
-        <button class="btn ghost" id="nextMonth">→</button>
-      </div>
-
-      <div class="calGrid">
-        ${IT.dayNamesShort.slice(1).concat(IT.dayNamesShort[0]).map(n => `<div class="dow">${n}</div>`).join('')}
-        ${renderMonthGrid(y,m,activeDate)}
-      </div>
-
-      <div class="small muted" style="margin-top:8px">
-        🏐 = allenamento (Lun-Gio, Sab) • ⭐ = partita (Domenica)
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:14px">
-      <div class="infoTitle" style="font-size:${isToday?26:14}">${isToday?'OGGI':'GIORNO SELEZIONATO'}</div>
-      <div class="infoDate">${formatFullItalianDate(activeDate)}</div>
-
-      <div>
-        <div class="row between" style="margin-bottom:6px">
-          <div class="sectionTitle">🏐 Allenamenti</div>
-          ${training ? `<button class="btn" style="background:var(--green)" id="openTraining">APRI ALLENAMENTO</button>` : ''}
-        </div>
-        <div>
-          ${training
-            ? `Turni: ${getSlotsForDate(activeDate).map(formatSlotLabel).join(' / ')}`
-            : 'Nessun allenamento programmato.'}
-        </div>
-        <div style="margin-top:8px" class="row">
-          <div class="muted">La tua presenza:</div>
-          <div>${pill}</div>
-        </div>
-      </div>
-
-      <div class="divider"></div>
-
-      <div>
-        <div class="sectionTitle">⭐ Partite</div>
-        <div>${match ? 'Partita in programma!' : 'Nessuna partita in calendario.'}</div>
-      </div>
-
-      <div class="divider"></div>
-
-      <div>
-        <div class="sectionTitle">Note</div>
-        <div>Nessuna nota per questo giorno.</div>
-      </div>
-    </div>
-  `;
-}
-
-function renderMonthGrid(y,m,activeDate){
-  const cells = buildMonthCells(y,m);
-  return cells.map((dt) => {
-    if(!dt){
-      return `<div class="day disabled" style="visibility:hidden"></div>`;
-    }
-    const dateStr = ymd(dt);
-    const training = isTrainingDay(dateStr);
-    const match = isMatchDay(dateStr);
-    const selected = dateStr === activeDate;
-
-    const icon = match ? '⭐' : (training ? '🏐' : '');
-    return `
-      <div class="day ${selected?'selected':''}" data-day="${dateStr}">
-        <div class="dayNum">${dt.getDate()}</div>
-        <div class="dayIcon">${icon}</div>
-      </div>
-    `;
-  }).join('');
 }
 
 function bindCalendar(activeDate){
