@@ -285,43 +285,6 @@ function escapeHtml(s){
 }
 
 /* =====================
-   DB sync (availability) - Netlify Functions (Supabase)
-   ===================== */
-
-async function apiGetMyAvailability(training_date){
-  if(!state.user?.id) return null;
-
-  const res = await fetch("/.netlify/functions/get_availability", {
-    method:"POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      member_id: state.user.id,
-      training_date
-    })
-  });
-  const j = await res.json().catch(()=> ({}));
-  if(!res.ok) throw new Error(j.error || "get_availability failed");
-  return j.status ?? null; // 'yes' | 'no' | 'maybe' | null
-}
-
-async function apiSetMyAvailability(training_date, status){
-  if(!state.user?.id) throw new Error("User non valido");
-
-  const res = await fetch("/.netlify/functions/set_availability", {
-    method:"POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      member_id: state.user.id,
-      training_date,
-      status
-    })
-  });
-  const j = await res.json().catch(()=> ({}));
-  if(!res.ok) throw new Error(j.error || "set_availability failed");
-  return j.status ?? status;
-}
-
-/* =====================
    App State
    ===================== */
 
@@ -336,14 +299,52 @@ let state = {
   selectedDate: null,
   trainingDate: null,
 
-  // availability state (fetched from DB)
-  myAvailability: null,
-  loadingAvailability: false,
+  // cache UI (non source of truth)
+  myAvailabilityCache: {} // { "YYYY-MM-DD": "yes|no|maybe|null" }
 };
 
 function persist(){
   if(state.user) saveJSON(STORAGE_USER, state.user);
   localStorage.setItem(STORAGE_NOTIF_ENABLED, state.notificationsEnabled ? 'true' : 'false');
+}
+
+/* =====================
+   DB sync (availability) - CONSISTENT WITH YOUR FUNCTIONS
+   ===================== */
+
+/**
+ * get_availability.cjs expects:
+ *   GET /.netlify/functions/get_availability?user_id=...&date=YYYY-MM-DD
+ */
+async function apiGetMyAvailability(dateStr){
+  const user = state.user;
+  if(!user?.id) return null;
+
+  const url = `/.netlify/functions/get_availability?user_id=${encodeURIComponent(user.id)}&date=${encodeURIComponent(dateStr)}`;
+  const res = await fetch(url, { method: "GET" });
+
+  const j = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(j.error || "get_availability failed");
+  return j.status ?? null; // 'yes' | 'no' | 'maybe' | null
+}
+
+/**
+ * set_availability.cjs expects:
+ *   POST { user_id, date, status }
+ */
+async function apiSetMyAvailability(dateStr, status){
+  const user = state.user;
+  if(!user?.id) throw new Error("User non valido");
+
+  const res = await fetch("/.netlify/functions/set_availability", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ user_id: user.id, date: dateStr, status })
+  });
+
+  const j = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(j.error || "set_availability failed");
+  return true;
 }
 
 /* =====================
@@ -423,8 +424,7 @@ async function handleSignup(){
   try{
     const user = await apiSignupMember(nome, y);
     state.user = user;
-    state.myAvailability = null;
-    state.loadingAvailability = false;
+    state.myAvailabilityCache = {};
     persist();
     render();
     alert(`Registrato! Il tuo codice è: ${user.member_code}`);
@@ -450,8 +450,7 @@ async function handleLogin(){
   try{
     const user = await apiLoginMember(nome, code);
     state.user = user;
-    state.myAvailability = null;
-    state.loadingAvailability = false;
+    state.myAvailabilityCache = {};
     persist();
     render();
   }catch(e){
@@ -467,23 +466,18 @@ function handleLogout(){
   localStorage.setItem(STORAGE_NOTIF_ENABLED, 'false');
   state.authForm = { nome:'', code:'', birthYear:'' };
   state.authMode = 'login';
-
-  state.myAvailability = null;
-  state.loadingAvailability = false;
-
+  state.myAvailabilityCache = {};
   closeOverlay();
   render();
 }
 
 /* =====================
-   Training Overlay (DB synced)
+   Overlay (allenamento)
    ===================== */
 
 function closeOverlay(){
   overlayEl.classList.remove('open');
   state.trainingDate = null;
-  state.myAvailability = null;
-  state.loadingAvailability = false;
 }
 
 overlayEl.addEventListener('click', (e) => {
@@ -501,46 +495,48 @@ async function openTrainingView(dateStr){
   if(!isTrainingDay(dateStr)) return;
 
   state.trainingDate = dateStr;
-  state.loadingAvailability = true;
-  state.myAvailability = null;
-
   overlayEl.classList.add('open');
-  renderOverlay();
+
+  // Loading UI
+  modalEl.innerHTML = `
+    <div class="row between">
+      <div>
+        <div style="font-size:20px;font-weight:800;color:var(--accent)">Allenamento</div>
+        <div style="font-size:14px">${formatFullItalianDate(dateStr)}</div>
+      </div>
+      <button class="btn" id="closeModal">CHIUDI</button>
+    </div>
+    <div class="divider"></div>
+    <div class="muted">Carico dal database...</div>
+  `;
+  $('#closeModal').onclick = closeOverlay;
 
   try{
     const status = await apiGetMyAvailability(dateStr);
-    state.myAvailability = status;
+    state.myAvailabilityCache[dateStr] = status;
+    renderOverlay(dateStr, status);
   }catch(e){
-    alert("Errore caricando la presenza: " + (e?.message || e));
-    state.myAvailability = null;
-  }finally{
-    state.loadingAvailability = false;
-    renderOverlay();
+    modalEl.innerHTML = `
+      <div class="row between">
+        <div>
+          <div style="font-size:20px;font-weight:800;color:var(--accent)">Allenamento</div>
+          <div style="font-size:14px">${formatFullItalianDate(dateStr)}</div>
+        </div>
+        <button class="btn" id="closeModal">CHIUDI</button>
+      </div>
+      <div class="divider"></div>
+      <div style="color:var(--red);font-size:13px">
+        Errore caricando la presenza: ${escapeHtml(e?.message || String(e))}
+      </div>
+      <div class="small muted" style="margin-top:10px">
+        Tip: apri DevTools → Network → guarda la chiamata a get_availability e lo status code.
+      </div>
+    `;
+    $('#closeModal').onclick = closeOverlay;
   }
 }
 
-async function setMyAvailability(dateStr, status){
-  state.loadingAvailability = true;
-  renderOverlay();
-
-  try{
-    const saved = await apiSetMyAvailability(dateStr, status);
-    state.myAvailability = saved;
-  }catch(e){
-    alert("Errore salvataggio DB: " + (e?.message || e));
-  }finally{
-    state.loadingAvailability = false;
-    renderOverlay();
-  }
-}
-
-function renderOverlay(){
-  if(!state.trainingDate) return;
-
-  const dateStr = state.trainingDate;
-  const my = state.myAvailability ?? null;
-  const loading = !!state.loadingAvailability;
-
+function renderOverlay(dateStr, status){
   modalEl.innerHTML = `
     <div class="row between">
       <div>
@@ -552,17 +548,16 @@ function renderOverlay(){
 
     <div class="divider"></div>
 
-    <div style="font-weight:800;margin-bottom:6px">La tua presenza (sync Supabase)</div>
-
+    <div style="font-weight:800;margin-bottom:6px">La tua presenza (sync DB)</div>
     <div class="row" style="flex-wrap:wrap">
-      <button class="btn" style="background:var(--green)" id="meYes" ${loading?'disabled':''}>✅ Presente</button>
-      <button class="btn" style="background:var(--red);color:#fff" id="meNo" ${loading?'disabled':''}>❌ Assente</button>
-      <button class="btn" style="background:var(--yellow)" id="meMaybe" ${loading?'disabled':''}>❓ Forse</button>
+      <button class="btn" style="background:var(--green)" id="meYes">✅ Presente</button>
+      <button class="btn" style="background:var(--red);color:#fff" id="meNo">❌ Assente</button>
+      <button class="btn" style="background:var(--yellow)" id="meMaybe">❓ Forse</button>
     </div>
 
     <div style="margin-top:10px" class="row">
       <div class="muted">Stato attuale:</div>
-      <div>${loading ? `<span class="muted">caricamento...</span>` : pillForStatus(my)}</div>
+      <div id="statusPill">${pillForStatus(status)}</div>
     </div>
 
     <div class="divider"></div>
@@ -572,10 +567,29 @@ function renderOverlay(){
     </div>
   `;
 
-  $('#closeModal').onclick = () => closeOverlay();
-  $('#meYes').onclick = () => setMyAvailability(dateStr, 'yes');
-  $('#meNo').onclick = () => setMyAvailability(dateStr, 'no');
-  $('#meMaybe').onclick = () => setMyAvailability(dateStr, 'maybe');
+  $('#closeModal').onclick = closeOverlay;
+
+  const set = async (newStatus) => {
+    $('#meYes').disabled = true;
+    $('#meNo').disabled = true;
+    $('#meMaybe').disabled = true;
+
+    try{
+      await apiSetMyAvailability(dateStr, newStatus);
+      state.myAvailabilityCache[dateStr] = newStatus;
+      $('#statusPill').innerHTML = pillForStatus(newStatus);
+    }catch(e){
+      alert("Errore salvataggio DB: " + (e?.message || e));
+    }finally{
+      $('#meYes').disabled = false;
+      $('#meNo').disabled = false;
+      $('#meMaybe').disabled = false;
+    }
+  };
+
+  $('#meYes').onclick = () => set('yes');
+  $('#meNo').onclick = () => set('no');
+  $('#meMaybe').onclick = () => set('maybe');
 }
 
 /* =====================
