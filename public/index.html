@@ -330,10 +330,11 @@ let state = {
 
   notificationsEnabled: (localStorage.getItem(STORAGE_NOTIF_ENABLED) === "true"),
 
+  activePage: "calendar",
   selectedDate: null,
   trainingDate: null,
 
-  myAvailabilityCache: {} // cache UI (not source of truth)
+  myAvailabilityCache: {}
 };
 
 function persist(){
@@ -372,6 +373,18 @@ async function handleToggleNotifications(){
 /* =====================
    Auth
    ===================== */
+
+async function apiGetWeekOverview(dateStr){
+  const res = await fetch("/.netlify/functions/get_week_overview", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ date: dateStr })
+  });
+  const j = await res.json().catch(()=> ({}));
+  if(!res.ok) throw new Error(j.error || "get_week_overview failed");
+  return j; // { from, to, rows: [...] }
+}
+
 
 async function apiLoginMember(nome, code){
   const res = await fetch("/.netlify/functions/login_member", {
@@ -599,6 +612,127 @@ function renderOverlay(dateStr, status){
    Calendar UI
    ===================== */
 
+function weekTrainingDates(anyDateStr){
+  const d = parseYMD(anyDateStr);
+  const day = d.getDay() === 0 ? 7 : d.getDay(); // Mon=1..Sun=7
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - (day - 1));
+
+  const out = [];
+  for(let i=0;i<7;i++){
+    const dt = new Date(monday);
+    dt.setDate(monday.getDate() + i);
+    const ds = ymd(dt);
+    if(isTrainingDay(ds)) out.push(ds);
+  }
+  return out;
+}
+
+function groupByStatus(rows){
+  const map = { yes: [], no: [], maybe: [] };
+  for(const r of rows){
+    if(r.status === "yes") map.yes.push(r);
+    else if(r.status === "no") map.no.push(r);
+    else if(r.status === "maybe") map.maybe.push(r);
+  }
+  // sort names for nicer UI
+  for(const k of Object.keys(map)){
+    map[k].sort((a,b) => String(a.name||"").localeCompare(String(b.name||"")));
+  }
+  return map;
+}
+
+function renderDashboardShell(activeDate){
+  return `
+    <div class="hero">
+      <div class="l1">DASHBOARD</div>
+      <div class="l2">PRESENZE SETTIMANALI</div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:800;margin-bottom:6px">Settimana corrente</div>
+      <div class="small muted" style="margin-bottom:12px">
+        Mostro solo i giorni allenamento (Lun-Gio + Sab).
+      </div>
+
+      <div class="muted" id="dashLoading">Carico dal database...</div>
+      <div id="dashBody" style="display:none"></div>
+      <div id="dashErr" style="display:none;color:var(--red);font-size:13px"></div>
+    </div>
+  `;
+}
+
+async function loadAndRenderDashboard(activeDate){
+  const loadingEl = $("#dashLoading");
+  const bodyEl = $("#dashBody");
+  const errEl = $("#dashErr");
+
+  loadingEl.style.display = "block";
+  bodyEl.style.display = "none";
+  errEl.style.display = "none";
+
+  try{
+    const data = await apiGetWeekOverview(activeDate);
+    const dates = weekTrainingDates(activeDate);
+
+    // Index rows by training_date
+    const byDate = {};
+    for(const ds of dates) byDate[ds] = [];
+    for(const r of (data.rows || [])){
+      if(byDate[r.training_date]) byDate[r.training_date].push(r);
+    }
+
+    bodyEl.innerHTML = dates.map(ds => {
+      const groups = groupByStatus(byDate[ds] || []);
+      const yes = groups.yes;
+      const no = groups.no;
+      const maybe = groups.maybe;
+
+      const renderNames = (arr) =>
+        arr.length ? arr.map(x => `<div class="small">• ${escapeHtml(x.name || x.member_id)}</div>`).join("")
+                   : `<div class="small muted">—</div>`;
+
+      return `
+        <div style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px">
+          <div style="font-weight:900;color:var(--accent);margin-bottom:8px">
+            ${escapeHtml(formatFullItalianDate(ds))}
+          </div>
+
+          <div class="row" style="gap:12px;margin-bottom:10px">
+            <div>${pillForStatus("yes")} <span class="small muted">(${yes.length})</span></div>
+            <div>${pillForStatus("no")} <span class="small muted">(${no.length})</span></div>
+            <div>${pillForStatus("maybe")} <span class="small muted">(${maybe.length})</span></div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+            <div>
+              <div class="small" style="font-weight:800;margin-bottom:6px">✅ Presente</div>
+              ${renderNames(yes)}
+            </div>
+            <div>
+              <div class="small" style="font-weight:800;margin-bottom:6px">❌ Assente</div>
+              ${renderNames(no)}
+            </div>
+            <div>
+              <div class="small" style="font-weight:800;margin-bottom:6px">❓ Forse</div>
+              ${renderNames(maybe)}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    loadingEl.style.display = "none";
+    bodyEl.style.display = "block";
+  }catch(e){
+    loadingEl.style.display = "none";
+    errEl.style.display = "block";
+    errEl.textContent = "Errore caricando dashboard: " + (e?.message || String(e));
+  }
+}
+
 function buildMonthCells(year, monthIndex){
   const first = new Date(year, monthIndex, 1);
   const startDow = (first.getDay() + 6) % 7; // Monday=0
@@ -702,16 +836,40 @@ function render(){
 
   appEl.innerHTML = `
     <div class="tabs">
-      <div class="tab active">CALENDARIO</div>
+      <div class="tab ${state.activePage==="calendar" ? "active" : ""}" id="tabCal">
+        HOME
+      </div>
+      <div class="tab ${state.activePage==="dashboard" ? "active" : ""}" id="tabDash">
+        DASHBOARD
+      </div>
       <button class="btn ghost" id="logoutBtn">Logout</button>
     </div>
 
-    ${renderCalendarPage(activeDate)}
+    ${state.activePage === "calendar"
+      ? renderCalendarPage(activeDate)
+      : renderDashboardShell(activeDate)
+    }
   `;
 
   $("#logoutBtn").onclick = handleLogout;
-  bindCalendar(activeDate);
+
+  $("#tabCal").onclick = () => {
+    state.activePage = "calendar";
+    render();
+  };
+
+  $("#tabDash").onclick = () => {
+    state.activePage = "dashboard";
+    render();
+  };
+
+  if(state.activePage === "calendar"){
+    bindCalendar(activeDate);
+  }else{
+    loadAndRenderDashboard(activeDate);
+  }
 }
+
 
 function renderAuth(){
   const a = state.authMode;
